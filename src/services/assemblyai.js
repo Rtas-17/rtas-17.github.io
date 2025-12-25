@@ -1,3 +1,19 @@
+// Detect environment and use appropriate endpoint
+// For GitHub Pages deployment, we need a CORS proxy
+// Users can set their own proxy: localStorage.setItem('assemblyai_proxy_url', 'YOUR_URL')
+const isNetlify = typeof window !== 'undefined' && (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('.netlify.live'));
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// Default to Netlify function if on Netlify, otherwise use direct API (which may fail with CORS on GitHub Pages)
+let defaultTokenUrl = 'https://api.assemblyai.com/v2/realtime/token';
+if (isNetlify) {
+    defaultTokenUrl = '/.netlify/functions/assemblyai-token';
+}
+
+const TOKEN_PROXY_URL = typeof localStorage !== 'undefined' ? 
+    (localStorage.getItem('assemblyai_proxy_url') || defaultTokenUrl) : 
+    defaultTokenUrl;
+    
 const ASSEMBLYAI_API_KEY = 'cecc12bdb280498b9c5d37868bc79184';
 
 export class AssemblyAIService {
@@ -11,8 +27,12 @@ export class AssemblyAIService {
         if (this.socket) return;
 
         try {
-            // First, get a temporary token from AssemblyAI
-            const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
+            // Get a temporary token from AssemblyAI (or proxy)
+            // If you're getting "Failed to fetch" errors due to CORS:
+            // 1. Set up a proxy (see CORS_PROXY_SETUP.md)
+            // 2. Configure the proxy URL: localStorage.setItem('assemblyai_proxy_url', 'YOUR_PROXY_URL')
+            // 3. Or deploy to a platform with serverless functions (Netlify, Vercel)
+            const response = await fetch(TOKEN_PROXY_URL, {
                 method: 'POST',
                 headers: {
                     'Authorization': apiKey,
@@ -22,7 +42,8 @@ export class AssemblyAIService {
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to get AssemblyAI token: ${response.status} ${response.statusText}`);
+                const errorText = await response.text().catch(() => '');
+                throw new Error(`Failed to get AssemblyAI token: ${response.status} ${response.statusText}${errorText ? ' - ' + errorText : ''}`);
             }
 
             const data = await response.json();
@@ -81,6 +102,20 @@ export class AssemblyAIService {
             });
         } catch (error) {
             console.error('Failed to connect to AssemblyAI:', error);
+            // Provide user-friendly error message for common CORS issues
+            if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+                const corsError = new Error(
+                    'Cannot connect to AssemblyAI: CORS policy blocked the request. ' +
+                    'This happens because AssemblyAI\'s token endpoint cannot be called directly from browsers. ' +
+                    'Solutions:\n' +
+                    '1. Deploy a CORS proxy (see CORS_PROXY_SETUP.md)\n' +
+                    '2. Deploy this app to Netlify, Vercel, or Cloudflare Pages with a serverless function\n' +
+                    '3. Run your own backend server to proxy token requests'
+                );
+                corsError.originalError = error;
+                this.emit('error', corsError);
+                throw corsError;
+            }
             this.emit('error', error);
             throw error; // Re-throw to propagate the error
         }
