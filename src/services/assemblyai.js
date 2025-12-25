@@ -2,18 +2,26 @@
 // Based on AssemblyAI's official realtime-react-example
 // https://github.com/AssemblyAI-Community/realtime-react-example
 
-// Detect environment and use appropriate endpoint
-const isNetlify = typeof window !== 'undefined' && (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('.netlify.live'));
+// Detect environment and use appropriate Netlify function endpoint
+// Works for: Netlify production, Netlify CLI (port 8888), and can be overridden via localStorage
+const isNetlifyEnv = typeof window !== 'undefined' && (
+    window.location.hostname.includes('netlify.app') || 
+    window.location.hostname.includes('.netlify.live') ||
+    window.location.port === '8888' // Netlify CLI dev server
+);
 
-// Default to Netlify function if on Netlify, otherwise use direct API (which will fail with CORS on GitHub Pages)
-let defaultTokenUrl = '/token'; // Relative URL for local backend or serverless function
-if (isNetlify) {
-    defaultTokenUrl = '/.netlify/functions/assemblyai-token';
-}
+// Always default to Netlify function path (works for Netlify CLI and production)
+const defaultTokenUrl = '/.netlify/functions/assemblyai-token';
 
 const TOKEN_URL = typeof localStorage !== 'undefined' ? 
     (localStorage.getItem('assemblyai_token_url') || defaultTokenUrl) : 
     defaultTokenUrl;
+
+// Log the configuration for debugging
+if (typeof window !== 'undefined') {
+    console.log('AssemblyAI Token URL:', TOKEN_URL);
+    console.log('Netlify Environment:', isNetlifyEnv);
+}
 
 export class AssemblyAIService {
     constructor() {
@@ -41,8 +49,8 @@ export class AssemblyAIService {
             if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
                 const helpfulError = new Error(
                     'Cannot connect to token server. ' +
-                    'If running locally, make sure the backend server is running on port 8000. ' +
-                    'If deployed, ensure the serverless function is configured. ' +
+                    'For local development, run "npx netlify dev" instead of "npm run dev". ' +
+                    'For deployed apps, ensure the serverless function is configured. ' +
                     'See CORS_PROXY_SETUP.md for details.'
                 );
                 helpfulError.originalError = error;

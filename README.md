@@ -23,12 +23,25 @@ For other solutions, see [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md).
 
 ## Local Development
 
+### Option 1: With Netlify CLI (Recommended - Functions Work)
+
+This runs the app with Netlify Functions locally:
+
+```bash
+npm install
+npx netlify dev
+```
+
+The app will run on `http://localhost:8888` with the Netlify Function available at `/.netlify/functions/assemblyai-token`.
+
+### Option 2: Regular Vite Dev Server (Functions Won't Work)
+
 ```bash
 npm install
 npm run dev
 ```
 
-**Note**: You may encounter CORS issues when testing locally. See [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md) for solutions.
+**Note**: This will start the app on `http://localhost:5173`, but the AssemblyAI integration won't work because there's no backend to generate tokens. You'll see a "Cannot connect to token server" error. Use Option 1 or deploy to Netlify/Vercel for full functionality.
 
 ## Deployment
 
