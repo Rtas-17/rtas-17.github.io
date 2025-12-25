@@ -6,8 +6,9 @@ export function useAudioRecorder() {
     const mediaRecorder = useRef(null);
 
     const startRecording = useCallback(async () => {
+        let stream = null;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
             // Setup listener for data
@@ -17,28 +18,19 @@ export function useAudioRecorder() {
                 }
             });
 
-            // Connect to AssemblyAI and wait for open
+            // Connect to AssemblyAI and wait for connection
+            // The connect() method now returns a Promise that resolves when connected
             await assemblyAIService.connect();
-
-            const waitForConnection = () => new Promise((resolve) => {
-                if (assemblyAIService.socket?.readyState === WebSocket.OPEN) {
-                    resolve();
-                    return;
-                }
-                const unsub = assemblyAIService.on('status', (status) => {
-                    if (status === 'connected') {
-                        unsub();
-                        resolve();
-                    }
-                });
-            });
-
-            await waitForConnection();
 
             mediaRecorder.current.start(250); // Send chunks every 250ms
             setIsRecording(true);
         } catch (err) {
-            console.error('Error accessing microphone:', err);
+            console.error('Error starting recording:', err);
+            // Clean up on error - stop any active media tracks
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            alert(`Failed to start recording: ${err.message || 'Unknown error'}`);
         }
     }, []);
 
