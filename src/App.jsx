@@ -144,37 +144,6 @@ function App() {
                   }
                 }}
               />
-
-              {/* File Upload for Testing */}
-              <label className="p-3 bg-surface border border-border rounded-xl cursor-pointer hover:bg-white/5 transition-colors text-text-muted hover:text-white flex items-center justify-center">
-                <input type="file" accept="audio/*" className="hidden" onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-
-                  try {
-                    // Connect to AssemblyAI - the connect() method now waits for connection
-                    await assemblyAIService.connect();
-
-                    // Stream file in chunks
-                    const reader = new FileReader();
-                    reader.onload = async (event) => {
-                      const buffer = event.target.result;
-                      const chunkSize = 4096; // 4KB chunks
-                      for (let i = 0; i < buffer.byteLength; i += chunkSize) {
-                        const chunk = buffer.slice(i, i + chunkSize);
-                        assemblyAIService.sendAudio(chunk);
-                        await new Promise(r => setTimeout(r, 50)); // Simulate stream timing
-                      }
-                    };
-                    reader.readAsArrayBuffer(file);
-                  } catch (error) {
-                    console.error('Failed to process audio file:', error);
-                    alert('Failed to process audio file: ' + error.message);
-                  }
-                }} />
-                <span className="sr-only">Upload Audio</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              </label>
             </div>
 
             <button

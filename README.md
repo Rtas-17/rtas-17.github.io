@@ -1,16 +1,96 @@
-# React + Vite
+# MasriConnect - Real-time English to Egyptian Arabic Translation
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project provides real-time voice translation from English to Egyptian Arabic using AssemblyAI for speech recognition and Google Gemini for translation.
+
+## ⚠️ Important: Configuration Required
+
+### Setting Up Your AssemblyAI API Key
+
+This application requires an AssemblyAI API key. You need to configure it as an environment variable:
+
+**For Netlify:**
+1. Go to Site settings > Environment variables
+2. Add variable: `ASSEMBLYAI_API_KEY` = your API key
+3. Redeploy the site
+
+**For Local Development (Netlify CLI):**
+Create a `.env` file in the project root:
+```env
+ASSEMBLYAI_API_KEY=your_api_key_here
+```
+
+**Get your API key:** [AssemblyAI Dashboard](https://www.assemblyai.com/app/account)
+
+### Common Error
+
+If you see **"failed to start recording: failed to fetch"** or **"ASSEMBLYAI_API_KEY environment variable not set"**, it means the API key is not configured properly.
+
+## Features
+
+- Real-time speech-to-text transcription
+- Automatic translation to Egyptian Arabic with phonetic transcription
+- Support for audio file uploads
+- Text input for testing
+
+## Local Development
+
+### Option 1: With Netlify CLI (Recommended - Functions Work)
+
+This runs the app with Netlify Functions locally:
+
+```bash
+npm install
+npx netlify dev
+```
+
+The app will run on `http://localhost:8888` with the Netlify Function available at `/.netlify/functions/assemblyai-token`.
+
+### Option 2: Regular Vite Dev Server (Functions Won't Work)
+
+```bash
+npm install
+npm run dev
+```
+
+**Note**: This will start the app on `http://localhost:5173`, but the AssemblyAI integration won't work because there's no backend to generate tokens. You'll see a "Cannot connect to token server" error. Use Option 1 or deploy to Netlify/Vercel for full functionality.
 
 ## Deployment
 
-This project is automatically deployed to GitHub Pages when changes are pushed to the `master` branch. The deployment is handled by a GitHub Actions workflow that:
+### GitHub Pages (Default - Requires CORS Proxy Setup)
 
-1. Builds the project using `npm run build`
-2. Uploads the built artifacts from the `dist` folder
-3. Deploys to GitHub Pages
+This project is automatically deployed to GitHub Pages when changes are pushed to the `master` branch. However, you'll need to set up a CORS proxy for the AssemblyAI integration to work. See [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md).
 
-**Note:** Ensure that GitHub Pages is configured in your repository settings to use "GitHub Actions" as the source.
+### Netlify (Recommended - Works Out of the Box)
+
+The easiest way to deploy this app:
+
+1. Push to GitHub
+2. Import into [Netlify](https://netlify.com)
+3. Deploy (uses included `netlify.toml` configuration)
+
+The Netlify Function will automatically proxy AssemblyAI requests, so everything works immediately.
+
+### Vercel
+
+Similar to Netlify, but you'll need to create an `api/assemblyai-token.js` file. See [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md) for details.
+
+## Configuration
+
+### API Keys
+
+- **Google Gemini**: Configured through the app's settings UI (for translation)
+- **AssemblyAI**: Must be set as environment variable (see configuration section above)
+
+### Custom Proxy URL
+
+To use a custom proxy or token server:
+```javascript
+localStorage.setItem('assemblyai_token_url', 'YOUR_PROXY_URL');
+```
+
+## React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 ## Vite Plugins
 

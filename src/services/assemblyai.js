@@ -1,76 +1,124 @@
-const ASSEMBLYAI_API_KEY = 'cecc12bdb280498b9c5d37868bc79184';
+// AssemblyAI Real-Time Transcription Service
+// Based on AssemblyAI's official realtime-react-example
+// https://github.com/AssemblyAI-Community/realtime-react-example
+
+// Always default to Netlify function path (works for Netlify CLI and production)
+// Can be overridden via localStorage: localStorage.setItem('assemblyai_token_url', 'YOUR_URL')
+const defaultTokenUrl = '/.netlify/functions/assemblyai-token';
+
+const TOKEN_URL = typeof localStorage !== 'undefined' ? 
+    (localStorage.getItem('assemblyai_token_url') || defaultTokenUrl) : 
+    defaultTokenUrl;
 
 export class AssemblyAIService {
     constructor() {
         this.socket = null;
+        this.audioContext = null;
+        this.mediaStream = null;
+        this.scriptProcessor = null;
         this.listeners = {};
-        this.sessionId = null;
+        this.turns = {};
     }
 
-    async connect(apiKey = ASSEMBLYAI_API_KEY) {
-        if (this.socket) return;
+    async getToken() {
+        try {
+            const response = await fetch(TOKEN_URL);
+            const data = await response.json();
+
+            if (!data || !data.token) {
+                throw new Error('No token received from server');
+            }
+
+            return data.token;
+        } catch (error) {
+            console.error('Failed to get token:', error);
+            // Provide user-friendly error message for common issues
+            if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+                const helpfulError = new Error(
+                    'Cannot connect to token server. ' +
+                    'For local development, run "npx netlify dev" instead of "npm run dev". ' +
+                    'For deployed apps, ensure the serverless function is configured. ' +
+                    'See CORS_PROXY_SETUP.md for details.'
+                );
+                helpfulError.originalError = error;
+                throw helpfulError;
+            }
+            throw error;
+        }
+    }
+
+    async connect() {
+        if (this.socket) {
+            console.log('Already connected');
+            return;
+        }
 
         try {
-            // First, get a temporary token from AssemblyAI
-            const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-                method: 'POST',
-                headers: {
-                    'Authorization': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ expires_in: 3600 })
-            });
+            // Get temporary token from backend
+            const token = await this.getToken();
 
-            if (!response.ok) {
-                throw new Error(`Failed to get AssemblyAI token: ${response.status} ${response.statusText}`);
-            }
+            // Connect to AssemblyAI v3 WebSocket
+            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&formatted_finals=true&token=${token}`;
+            this.socket = new WebSocket(wsUrl);
 
-            const data = await response.json();
-            
-            if (!data.token) {
-                throw new Error('No token received from AssemblyAI');
-            }
-            
-            const token = data.token;
-
-            // Connect to AssemblyAI WebSocket with language detection and Arabic support
-            // sample_rate=16000 is the default for browser audio
-            // Return a promise that resolves when connection is established or rejects on error
+            // Return a promise that resolves when connection is established
             return new Promise((resolve, reject) => {
-                this.socket = new WebSocket(
-                    `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`
-                );
-
-                this.socket.onopen = () => {
-                    console.log('AssemblyAI Connected');
+                this.socket.onopen = async () => {
+                    console.log('AssemblyAI WebSocket connected');
+                    console.log('Connected to:', wsUrl);
                     this.emit('status', 'connected');
-                    resolve();
-                };
 
-                this.socket.onmessage = (message) => {
-                    const received = JSON.parse(message.data);
-                    
-                    if (received.message_type === 'SessionBegins') {
-                        this.sessionId = received.session_id;
-                        console.log('AssemblyAI session started:', this.sessionId);
-                    } else if (received.message_type === 'PartialTranscript') {
-                        const transcript = received.text;
-                        if (transcript) {
-                            this.emit('transcript_interim', transcript);
-                        }
-                    } else if (received.message_type === 'FinalTranscript') {
-                        const transcript = received.text;
-                        if (transcript) {
-                            this.emit('transcript_final', transcript);
-                        }
+                    try {
+                        // Set up audio capture
+                        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        this.audioContext = new AudioContext({ sampleRate: 16000 });
+
+                        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+                        this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+                        source.connect(this.scriptProcessor);
+                        this.scriptProcessor.connect(this.audioContext.destination);
+
+                        // Process audio and send to AssemblyAI
+                        this.scriptProcessor.onaudioprocess = (event) => {
+                            if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+
+                            const input = event.inputBuffer.getChannelData(0);
+                            const buffer = new Int16Array(input.length);
+                            for (let i = 0; i < input.length; i++) {
+                                buffer[i] = Math.max(-1, Math.min(1, input[i])) * 0x7fff;
+                            }
+                            this.socket.send(buffer.buffer);
+                        };
+
+                        resolve();
+                    } catch (audioError) {
+                        console.error('Audio setup error:', audioError);
+                        this.disconnect();
+                        reject(audioError);
                     }
                 };
 
-                this.socket.onclose = (event) => {
-                    console.log(`AssemblyAI Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
-                    this.socket = null;
-                    this.sessionId = null;
-                    this.emit('status', 'disconnected');
+                this.socket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        
+                        if (message.type === 'Turn') {
+                            const { turn_order, transcript } = message;
+                            this.turns[turn_order] = transcript;
+                            
+                            // Emit interim transcript (current turn)
+                            if (transcript) {
+                                this.emit('transcript_interim', transcript);
+                            }
+                            
+                            // When a turn is complete, emit it as final
+                            // In v3, final transcripts come with formatted_finals=true
+                            this.emit('transcript_final', transcript);
+                        }
+                    } catch (err) {
+                        console.error('Error parsing message:', err);
+                    }
                 };
 
                 this.socket.onerror = (error) => {
@@ -78,44 +126,57 @@ export class AssemblyAIService {
                     this.emit('error', error);
                     reject(error);
                 };
+
+                this.socket.onclose = (event) => {
+                    console.log(`AssemblyAI Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+                    this.cleanup();
+                    this.emit('status', 'disconnected');
+                };
             });
         } catch (error) {
             console.error('Failed to connect to AssemblyAI:', error);
             this.emit('error', error);
-            throw error; // Re-throw to propagate the error
+            throw error;
         }
     }
 
-    sendAudio(audioData) {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            // AssemblyAI expects base64-encoded audio data
-            if (audioData instanceof Blob) {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64Audio = reader.result.split(',')[1];
-                    this.socket.send(JSON.stringify({ audio_data: base64Audio }));
-                };
-                reader.readAsDataURL(audioData);
-            } else if (audioData instanceof ArrayBuffer) {
-                // Convert ArrayBuffer to base64
-                const base64Audio = btoa(
-                    new Uint8Array(audioData).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                );
-                this.socket.send(JSON.stringify({ audio_data: base64Audio }));
-            }
+    cleanup() {
+        // Clean up audio resources
+        if (this.scriptProcessor) {
+            this.scriptProcessor.disconnect();
+            this.scriptProcessor = null;
         }
+
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+
+        if (this.mediaStream) {
+            this.mediaStream.getTracks().forEach(track => track.stop());
+            this.mediaStream = null;
+        }
+
+        this.socket = null;
+        this.turns = {};
     }
 
     disconnect() {
         if (this.socket) {
             // Send terminate message
             if (this.socket.readyState === WebSocket.OPEN) {
-                this.socket.send(JSON.stringify({ terminate_session: true }));
+                this.socket.send(JSON.stringify({ type: 'Terminate' }));
             }
             this.socket.close();
-            this.socket = null;
-            this.sessionId = null;
         }
+        this.cleanup();
+    }
+
+    // Deprecated: sendAudio is no longer used with v3 API
+    // Audio is automatically streamed via AudioContext
+    // This method is kept for backwards compatibility but does nothing
+    sendAudio() {
+        throw new Error('sendAudio is deprecated in v3 API. Audio is automatically streamed via AudioContext.');
     }
 
     on(event, callback) {
