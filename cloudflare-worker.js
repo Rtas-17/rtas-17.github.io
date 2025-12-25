@@ -1,41 +1,43 @@
 // Cloudflare Worker to proxy AssemblyAI token requests
+// Based on AssemblyAI's official realtime-react-example
 // This worker should be deployed to Cloudflare Workers
-// and the URL should be updated in src/services/assemblyai.js
 
 addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
 async function handleRequest(request) {
-  // Only allow POST requests
-  if (request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
-  }
-
-  // Handle CORS preflight
+  // Only allow GET requests (matching AssemblyAI's v3 API)
   if (request.method === 'OPTIONS') {
+    // Handle CORS preflight
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       }
     })
   }
 
+  if (request.method !== 'GET') {
+    return new Response('Method not allowed', { status: 405 })
+  }
+
   try {
-    // Parse the request body to get the API key
-    const body = await request.json()
-    const apiKey = body.apiKey || 'cecc12bdb280498b9c5d37868bc79184'
+    // Get API key from environment variable or use default
+    // You should set this as a secret in Cloudflare Workers
+    const apiKey = 'cecc12bdb280498b9c5d37868bc79184'
+
+    // Use v3 API endpoint (matching official example)
+    const expiresInSeconds = 500
+    const url = `https://streaming.assemblyai.com/v3/token?expires_in_seconds=${expiresInSeconds}`
 
     // Forward the request to AssemblyAI
-    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
+    const response = await fetch(url, {
+      method: 'GET',
       headers: {
-        'Authorization': apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ expires_in: 3600 })
+        'Authorization': apiKey
+      }
     })
 
     // Get the response data
