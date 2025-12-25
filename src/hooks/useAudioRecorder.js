@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { assemblyAIService } from '../services/assemblyai';
 
 export function useAudioRecorder() {

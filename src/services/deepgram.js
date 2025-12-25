@@ -1,4 +1,3 @@
-import { createClient } from "@deepgram/sdk";
 
 const DEEPGRAM_API_KEY = '63771d3abb82af795c47ca56d13eb21efdade672';
 
