@@ -31,12 +31,41 @@ export class AssemblyAIService {
 
             return data.token;
         } catch (error) {
-            console.error('Failed to get token:', error);
+            console.error('Failed to get token from server:', error);
+            
+            // Fallback: Try to use hardcoded API key
+            const hardcodedKey = typeof localStorage !== 'undefined' 
+                ? localStorage.getItem('assemblyai_api_key') 
+                : null;
+                
+            if (hardcodedKey) {
+                console.log('Attempting to use hardcoded API key...');
+                try {
+                    const response = await fetch(
+                        'https://streaming.assemblyai.com/v3/token?expires_in_seconds=500',
+                        {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': hardcodedKey
+                            }
+                        }
+                    );
+                    const data = await response.json();
+                    if (data && data.token) {
+                        console.log('Successfully obtained token using hardcoded API key');
+                        return data.token;
+                    }
+                } catch (fallbackError) {
+                    console.error('Failed to get token using hardcoded API key:', fallbackError);
+                }
+            }
+            
             // Provide user-friendly error message for common issues
             if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
                 const helpfulError = new Error(
                     'Cannot connect to token server. ' +
                     'For local development, run "npx netlify dev" instead of "npm run dev". ' +
+                    'For GitHub Pages deployment, set your API key with: localStorage.setItem("assemblyai_api_key", "YOUR_KEY_HERE"). ' +
                     'For deployed apps, ensure the serverless function is configured. ' +
                     'See CORS_PROXY_SETUP.md for details.'
                 );
@@ -101,20 +130,22 @@ export class AssemblyAIService {
 
                 this.socket.onmessage = (event) => {
                     try {
+                        console.log('Received message:', event.data);
                         const message = JSON.parse(event.data);
                         
                         if (message.type === 'Turn') {
                             const { turn_order, transcript } = message;
                             this.turns[turn_order] = transcript;
                             
-                            // Emit interim transcript (current turn)
+                            // Emit interim transcript (current turn) for all updates
                             if (transcript) {
                                 this.emit('transcript_interim', transcript);
                             }
                             
-                            // When a turn is complete, emit it as final
-                            // In v3, final transcripts come with formatted_finals=true
-                            this.emit('transcript_final', transcript);
+                            // Check if this is a final turn (has punctuation/complete sentence)
+                            if (transcript && (transcript.endsWith('.') || transcript.endsWith('?') || transcript.endsWith('!'))) {
+                                this.emit('transcript_final', transcript);
+                            }
                         }
                     } catch (err) {
                         console.error('Error parsing message:', err);

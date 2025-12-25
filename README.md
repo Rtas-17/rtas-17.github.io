@@ -56,9 +56,23 @@ npm run dev
 
 ## Deployment
 
-### GitHub Pages (Default - Requires CORS Proxy Setup)
+### GitHub Pages (Default - Works with Hardcoded API Key)
 
-This project is automatically deployed to GitHub Pages when changes are pushed to the `master` branch. However, you'll need to set up a CORS proxy for the AssemblyAI integration to work. See [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md).
+This project is automatically deployed to GitHub Pages when changes are pushed to the `master` branch. 
+
+**To use AssemblyAI on GitHub Pages**, you need to set your API key in the browser console:
+
+1. Open your browser's developer console (F12)
+2. Run this command:
+```javascript
+localStorage.setItem('assemblyai_api_key', 'YOUR_ASSEMBLYAI_API_KEY_HERE');
+```
+3. Reload the page
+4. Start recording - the app will now use your hardcoded API key to generate tokens
+
+**Get your API key:** [AssemblyAI Dashboard](https://www.assemblyai.com/app/account)
+
+**Note:** This method stores the API key in your browser's localStorage. It's suitable for personal use or testing, but for production deployments with multiple users, use Netlify or Vercel instead.
 
 ### Netlify (Recommended - Works Out of the Box)
 
@@ -66,9 +80,10 @@ The easiest way to deploy this app:
 
 1. Push to GitHub
 2. Import into [Netlify](https://netlify.com)
-3. Deploy (uses included `netlify.toml` configuration)
+3. Set the `ASSEMBLYAI_API_KEY` environment variable in Netlify dashboard
+4. Deploy (uses included `netlify.toml` configuration)
 
-The Netlify Function will automatically proxy AssemblyAI requests, so everything works immediately.
+The Netlify Function will automatically proxy AssemblyAI requests, so everything works immediately without exposing your API key.
 
 ### Vercel
 
@@ -79,7 +94,9 @@ Similar to Netlify, but you'll need to create an `api/assemblyai-token.js` file.
 ### API Keys
 
 - **Google Gemini**: Configured through the app's settings UI (for translation)
-- **AssemblyAI**: Must be set as environment variable (see configuration section above)
+- **AssemblyAI**: 
+  - For Netlify/Vercel: Set as environment variable (see deployment sections above)
+  - For GitHub Pages: Set in browser localStorage (see GitHub Pages section above)
 
 ### Custom Proxy URL
 
@@ -87,6 +104,15 @@ To use a custom proxy or token server:
 ```javascript
 localStorage.setItem('assemblyai_token_url', 'YOUR_PROXY_URL');
 ```
+
+### Hardcoded AssemblyAI API Key (for GitHub Pages)
+
+To set your AssemblyAI API key for direct use:
+```javascript
+localStorage.setItem('assemblyai_api_key', 'YOUR_ASSEMBLYAI_API_KEY');
+```
+
+This allows the app to work on GitHub Pages without needing a backend function.
 
 ## React + Vite
 
