@@ -12,9 +12,10 @@ function App() {
   const [currentTranslation, setCurrentTranslation] = useState(null);
   const lastTranslatedTextRef = useRef('');
   const isTranslatingRef = useRef(false);
+  const [assemblyAIKey, setAssemblyAIKey] = useState(localStorage.getItem('assemblyai_api_key') || '');
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || 'AIzaSyAOMc0cSZ7r-RdtsTDZisz-a7YG6KuAMiI');
   const [geminiModel, setGeminiModel] = useState(localStorage.getItem('gemini_model') || 'gemini-2.0-flash-exp');
-  const [showSettings, setShowSettings] = useState(!geminiKey);
+  const [showSettings, setShowSettings] = useState(!geminiKey || !assemblyAIKey);
 
   useEffect(() => {
     // Rolling Translation Loop
@@ -77,15 +78,17 @@ function App() {
     if (isRecording) {
       stopRecording();
     } else {
-      if (!geminiKey) setShowSettings(true);
+      if (!geminiKey || !assemblyAIKey) setShowSettings(true);
       else startRecording();
     }
   };
 
-  const saveKey = (key, model) => {
-    setGeminiKey(key);
+  const saveKeys = (assemblyKey, geminiApiKey, model) => {
+    setAssemblyAIKey(assemblyKey);
+    setGeminiKey(geminiApiKey);
     setGeminiModel(model);
-    localStorage.setItem('gemini_key', key);
+    localStorage.setItem('assemblyai_api_key', assemblyKey);
+    localStorage.setItem('gemini_key', geminiApiKey);
     localStorage.setItem('gemini_model', model);
     setShowSettings(false);
   };
@@ -165,29 +168,66 @@ function App() {
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Sparkles className="text-primary" /> Setup Translation
+              <Sparkles className="text-primary" /> API Settings
             </h2>
             <p className="text-text-muted mb-4 text-sm">
-              To enable AI translation, please enter your Google Gemini API Key.
-              <br />(AssemblyAI is pre-configured).
+              To enable speech recognition and AI translation, please enter your API keys for both services.
             </p>
-            <input
-              type="password"
-              placeholder="Gemini API Key"
-              className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors mb-4"
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Gemini Model (e.g., gemini-2.0-flash-exp)"
-              className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors mb-4"
-              value={geminiModel}
-              onChange={(e) => setGeminiModel(e.target.value)}
-            />
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                AssemblyAI API Key <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Enter AssemblyAI API Key"
+                className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+                value={assemblyAIKey}
+                onChange={(e) => setAssemblyAIKey(e.target.value)}
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Get your key from <a href="https://www.assemblyai.com/app/account" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AssemblyAI Dashboard</a>
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                Google Gemini API Key <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Enter Gemini API Key"
+                className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google AI Studio</a>
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                Gemini Model
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., gemini-2.0-flash-exp"
+                className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+                value={geminiModel}
+                onChange={(e) => setGeminiModel(e.target.value)}
+              />
+            </div>
+
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-              <button onClick={() => saveKey(geminiKey, geminiModel)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+              <button 
+                onClick={() => saveKeys(assemblyAIKey, geminiKey, geminiModel)} 
+                disabled={!geminiKey || !assemblyAIKey}
+                className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save & Start
+              </button>
             </div>
           </div>
         </div>
