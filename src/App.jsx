@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Settings, Send, Globe, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Mic, MicOff, Settings, Send, Globe, Sparkles, StopCircle, RefreshCw, X, Play, Languages } from 'lucide-react';
+import clsx from 'clsx';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
-import { deepgramService } from './services/deepgram';
-import { translateText } from './services/gemini';
+import { assemblyAIService } from './services/assemblyAI';
+import { initGemini, translateText, getAvailableModels } from './services/gemini';
 import { LiveTranscript } from './components/LiveTranscript';
 
 function App() {
@@ -12,45 +13,53 @@ function App() {
   const [currentTranslation, setCurrentTranslation] = useState(null);
   const lastTranslatedTextRef = useRef('');
   const isTranslatingRef = useRef(false);
-  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || 'AIzaSyAOMc0cSZ7r-RdtsTDZisz-a7YG6KuAMiI');
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || '');
+  const [modelList, setModelList] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(localStorage.getItem('gemini_model') || 'gemini-3-flash-preview');
+  const [inputLanguage, setInputLanguage] = useState('en');
   const [showSettings, setShowSettings] = useState(!geminiKey);
 
   useEffect(() => {
-    // Rolling Translation Loop
-    const checkTranslation = async () => {
+    if (geminiKey) {
+      initGemini(geminiKey);
+      getAvailableModels(geminiKey).then(models => {
+        if (models && models.length > 0) setModelList(models);
+      });
+    }
+  }, [geminiKey]);
+
+  useEffect(() => {
+    // Debounce Interim Translation
+    // Only translate if user pauses for 1000ms
+    const timer = setTimeout(async () => {
       if (currentTranscript && currentTranscript !== lastTranslatedTextRef.current && !isTranslatingRef.current && geminiKey) {
         isTranslatingRef.current = true;
         try {
           const textToTranslate = currentTranscript;
-          const result = await translateText(textToTranslate, geminiKey);
+          const result = await translateText(textToTranslate, geminiKey, selectedModel);
           if (result) {
             setCurrentTranslation(result);
             lastTranslatedTextRef.current = textToTranslate;
           }
         } catch (e) {
-          console.error(e);
+          console.error("Translation error (debounce):", e);
         } finally {
           isTranslatingRef.current = false;
         }
       }
-    };
+    }, 1000); // 1s Debounce
 
-    const interval = setInterval(checkTranslation, 500); // Check every 500ms to avoid flooding API
-    return () => clearInterval(interval);
-  }, [currentTranscript, geminiKey]);
+    return () => clearTimeout(timer);
+  }, [currentTranscript, geminiKey, selectedModel]);
 
   useEffect(() => {
-    // Listen to Deepgram events
-    const unsubInterim = deepgramService.on('transcript_interim', (text) => {
+    // Listen to AssemblyAI events
+    const unsubInterim = assemblyAIService.on('transcript_interim', (text) => {
       setCurrentTranscript(text);
     });
 
-    const unsubFinal = deepgramService.on('transcript_final', async (text) => {
-      // Final Commit
-      // We might have a currentTranslation that matches this text, or close to it.
-      // Ideally we do one last authoritative translation.
-
-      const newMessage = { role: 'user', text: text, translation: currentTranslation }; // Optimistically use current
+    const unsubFinal = assemblyAIService.on('transcript_final', async (text) => {
+      const newMessage = { role: 'user', text: text, translation: currentTranslation };
       setMessages(prev => [...prev, newMessage]);
 
       setCurrentTranscript('');
@@ -58,8 +67,7 @@ function App() {
       lastTranslatedTextRef.current = '';
 
       if (geminiKey) {
-        // Re-verify final translation to be sure
-        const translation = await translateText(text, geminiKey);
+        const translation = await translateText(text, geminiKey, selectedModel);
         setMessages(prev => prev.map(msg =>
           msg === newMessage ? { ...msg, translation: translation } : msg
         ));
@@ -70,14 +78,15 @@ function App() {
       unsubInterim();
       unsubFinal();
     };
-  }, [geminiKey, currentTranslation]);
+  }, [geminiKey, currentTranslation, selectedModel]);
 
   const handleToggleRecord = () => {
+    console.log('[UI] Toggle Record Clicked', { isRecording, inputLanguage });
     if (isRecording) {
       stopRecording();
     } else {
       if (!geminiKey) setShowSettings(true);
-      else startRecording();
+      else startRecording(inputLanguage);
     }
   };
 
@@ -113,12 +122,41 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 relative flex flex-col min-h-0">
+        {/* Language Toggle */}
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-black/60 backdrop-blur-md rounded-full p-1 flex border border-white/10 shadow-2xl">
+          <button
+            onClick={() => setInputLanguage('en')}
+            className={clsx(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+              inputLanguage === 'en' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
+            )}
+          >
+            🇺🇸 English
+          </button>
+          <button
+            onClick={() => setInputLanguage('auto')}
+            className={clsx(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+              inputLanguage === 'auto' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
+            )}
+          >
+            🤖 Auto
+          </button>
+          <button
+            onClick={() => setInputLanguage('ar')}
+            className={clsx(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+              inputLanguage === 'ar' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
+            )}
+          >
+            🇪🇬 Arabic
+          </button>
+        </div>
+
         <LiveTranscript messages={messages} currentTranscript={currentTranscript} currentTranslation={currentTranslation} />
 
         {/* Input Area / Controls */}
-        {/* Input Area / Controls */}
         <div className="p-6 pb-8 bg-gradient-to-t from-background via-background to-transparent relative z-20">
-
           <div className="max-w-3xl mx-auto flex flex-col gap-4">
             {/* Text Input for Testing */}
             <div className="flex gap-2">
@@ -134,7 +172,7 @@ function App() {
                     setMessages(prev => [...prev, newMessage]);
                     e.currentTarget.value = '';
                     // Translate
-                    const translation = await translateText(text, geminiKey);
+                    const translation = await translateText(text, geminiKey, selectedModel);
                     setMessages(prev => prev.map(msg =>
                       msg === newMessage ? { ...msg, translation: translation } : msg
                     ));
@@ -142,45 +180,10 @@ function App() {
                 }}
               />
 
-              {/* File Upload for Testing */}
-              <label className="p-3 bg-surface border border-border rounded-xl cursor-pointer hover:bg-white/5 transition-colors text-text-muted hover:text-white flex items-center justify-center">
-                <input type="file" accept="audio/*" className="hidden" onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-
-                  // Connect if not connected
-                  deepgramService.connect();
-                  // Wait for connection
-                  const waitForConnection = () => new Promise((resolve) => {
-                    if (deepgramService.socket?.readyState === WebSocket.OPEN) {
-                      resolve();
-                      return;
-                    }
-                    const unsub = deepgramService.on('status', (status) => {
-                      if (status === 'connected') {
-                        unsub();
-                        resolve();
-                      }
-                    });
-                  });
-                  await waitForConnection();
-
-                  // Stream file in chunks
-                  const reader = new FileReader();
-                  reader.onload = async (event) => {
-                    const buffer = event.target.result;
-                    const chunkSize = 4096; // 4KB chunks
-                    for (let i = 0; i < buffer.byteLength; i += chunkSize) {
-                      const chunk = buffer.slice(i, i + chunkSize);
-                      deepgramService.sendAudio(chunk);
-                      await new Promise(r => setTimeout(r, 50)); // Simulate stream timing
-                    }
-                  };
-                  reader.readAsArrayBuffer(file);
-                }} />
-                <span className="sr-only">Upload Audio</span>
+              {/* File Upload Placeholder - Simulating file transcription is disabled as we use streaming only */}
+              <div className="p-3 bg-surface/30 border border-border/50 rounded-xl cursor-not-allowed text-text-muted flex items-center justify-center grayscale">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              </label>
+              </div>
             </div>
 
             <button
@@ -195,34 +198,70 @@ function App() {
             </button>
           </div>
         </div>
-      </main>
+      </main >
 
       {/* Settings Modal */}
-      {showSettings && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Sparkles className="text-primary" /> Setup Translation
-            </h2>
-            <p className="text-text-muted mb-4 text-sm">
-              To enable AI translation, please enter your Google Gemini API Key.
-              <br />(Deepgram is pre-configured).
-            </p>
-            <input
-              type="password"
-              placeholder="Gemini API Key"
-              className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors mb-4"
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-            />
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-              <button onClick={() => saveKey(geminiKey)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+      {
+        showSettings && (
+          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Sparkles className="text-primary" /> Setup Translation
+              </h2>
+              <p className="text-text-muted mb-4 text-sm">
+                To enable AI translation, please enter your Google Gemini API Key.
+                <br />(AssemblyAI is pre-configured).
+              </p>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-400">Gemini API Key</label>
+                  <input
+                    type="password"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                    placeholder="Paste your Gemini API Key..."
+                    value={geminiKey}
+                    onChange={(e) => {
+                      setGeminiKey(e.target.value);
+                      localStorage.setItem('gemini_key', e.target.value);
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-400">Translation Model</label>
+                  <input
+                    type="text"
+                    list="model-suggestions"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                    placeholder="e.g. gemini-3-flash-preview"
+                    value={selectedModel}
+                    onChange={(e) => {
+                      setSelectedModel(e.target.value);
+                      localStorage.setItem('gemini_model', e.target.value);
+                    }}
+                  />
+                  <datalist id="model-suggestions">
+                    <option value="gemini-3-flash-preview" />
+                    <option value="gemini-2.0-flash-exp" />
+                    <option value="gemini-1.5-flash" />
+                    {modelList.map(m => (
+                      <option key={m.name} value={m.name}>{m.displayName}</option>
+                    ))}
+                  </datalist>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Tip: Enter any valid Gemini model ID.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
+                <button onClick={() => saveKey(geminiKey)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 

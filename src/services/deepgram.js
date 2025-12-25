@@ -9,18 +9,21 @@ export class DeepgramService {
         this.keepAliveInterval = null;
     }
 
-    connect(accessKey = DEEPGRAM_API_KEY) {
+    connect(accessKey = DEEPGRAM_API_KEY, language = 'en') {
         if (this.socket) return;
 
-        // Using nova-3 generally for better multilingual code switching.
-        // Added utterance_end_ms=1000 to prevent fragmentation and give model more context for detection.
-        this.socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&interim_results=true&diarize=false&language=multi&utterance_end_ms=1000', [
+        const model = language === 'en' ? 'nova-3' : 'whisper';
+        const langCode = language === 'en' ? 'en' : 'ar';
+        const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${langCode}&smart_format=true&interim_results=true`;
+
+        console.log(`Connecting to Deepgram (${language}): ${url}`);
+        this.socket = new WebSocket(url, [
             'token',
             accessKey,
         ]);
 
         this.socket.onopen = () => {
-            console.log('Deepgram Connected');
+            console.log('Deepgram Connected successfully');
             this.emit('status', 'connected');
         };
 

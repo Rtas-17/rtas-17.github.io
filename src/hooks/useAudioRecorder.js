@@ -1,57 +1,83 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { deepgramService } from '../services/deepgram';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { assemblyAIService } from '../services/assemblyAI';
 
-export function useAudioRecorder() {
+export const useAudioRecorder = () => {
     const [isRecording, setIsRecording] = useState(false);
-    const mediaRecorder = useRef(null);
+    const audioContext = useRef(null);
+    const processor = useRef(null);
+    const source = useRef(null);
+    const mediaStream = useRef(null);
 
-    const startRecording = useCallback(async () => {
+    const startRecording = useCallback(async (language = 'en') => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            mediaStream.current = stream;
 
-            // Setup listener for data
-            mediaRecorder.current.addEventListener('dataavailable', event => {
-                if (event.data.size > 0 && mediaRecorder.current?.state === 'recording') {
-                    deepgramService.sendAudio(event.data);
+            // Force 16000Hz sample rate, but browser may ignore
+            audioContext.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const actualSampleRate = audioContext.current.sampleRate;
+            console.log(`[AudioRecorder] AudioContext Sample Rate: ${actualSampleRate}Hz`);
+
+            source.current = audioContext.current.createMediaStreamSource(stream);
+            processor.current = audioContext.current.createScriptProcessor(4096, 1, 1);
+
+            source.current.connect(processor.current);
+            processor.current.connect(audioContext.current.destination);
+
+            processor.current.onaudioprocess = (e) => {
+                const inputData = e.inputBuffer.getChannelData(0);
+
+                // Convert Float32 to Int16 PCM (Exact match from AssemblyAI Example)
+                const buffer = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    buffer[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7fff;
                 }
-            });
 
-            // Connect to Deepgram and wait for open
-            deepgramService.connect();
+                // Send ArrayBuffer
+                assemblyAIService.sendAudio(buffer.buffer);
+            };
 
-            const waitForConnection = () => new Promise((resolve) => {
-                if (deepgramService.socket?.readyState === WebSocket.OPEN) {
-                    resolve();
-                    return;
-                }
-                const unsub = deepgramService.on('status', (status) => {
-                    if (status === 'connected') {
-                        unsub();
-                        resolve();
-                    }
-                });
-            });
+            console.log("[AudioRecorder] Connecting to AssemblyAI Service...");
 
-            await waitForConnection();
+            // Map 'en' -> 'en_us', 'ar' -> 'ar', 'auto' -> 'auto'
+            let langCode = 'auto';
+            if (language === 'en') langCode = 'en_us';
+            else if (language === 'ar') langCode = 'ar';
 
-            mediaRecorder.current.start(250); // Send chunks every 250ms
+            await assemblyAIService.connect(undefined, langCode, actualSampleRate);
+
             setIsRecording(true);
         } catch (err) {
-            console.error('Error accessing microphone:', err);
-        }
-    }, []);
-
-    const stopRecording = useCallback(() => {
-        if (mediaRecorder.current) {
-            if (mediaRecorder.current.state !== 'inactive') {
-                mediaRecorder.current.stop();
-            }
-            mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
+            console.error('Error accessing microphone or connecting:', err);
             setIsRecording(false);
-            deepgramService.disconnect();
         }
     }, []);
 
-    return { isRecording, startRecording, stopRecording };
-}
+    const stopRecording = useCallback(async () => {
+        if (processor.current) {
+            processor.current.disconnect();
+            processor.current = null;
+        }
+        if (source.current) {
+            source.current.disconnect();
+            source.current = null;
+        }
+        if (audioContext.current) {
+            audioContext.current.close();
+            audioContext.current = null;
+        }
+        if (mediaStream.current) {
+            mediaStream.current.getTracks().forEach(track => track.stop());
+            mediaStream.current = null;
+        }
+
+        await assemblyAIService.disconnect();
+        setIsRecording(false);
+    }, []);
+
+    return {
+        isRecording,
+        startRecording,
+        stopRecording
+    };
+};
