@@ -13,6 +13,7 @@ function App() {
   const lastTranslatedTextRef = useRef('');
   const isTranslatingRef = useRef(false);
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || 'AIzaSyAOMc0cSZ7r-RdtsTDZisz-a7YG6KuAMiI');
+  const [geminiModel, setGeminiModel] = useState(localStorage.getItem('gemini_model') || 'gemini-2.0-flash-exp');
   const [showSettings, setShowSettings] = useState(!geminiKey);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ function App() {
         isTranslatingRef.current = true;
         try {
           const textToTranslate = currentTranscript;
-          const result = await translateText(textToTranslate, geminiKey);
+          const result = await translateText(textToTranslate, geminiKey, geminiModel);
           if (result) {
             setCurrentTranslation(result);
             lastTranslatedTextRef.current = textToTranslate;
@@ -37,7 +38,7 @@ function App() {
 
     const interval = setInterval(checkTranslation, 500); // Check every 500ms to avoid flooding API
     return () => clearInterval(interval);
-  }, [currentTranscript, geminiKey]);
+  }, [currentTranscript, geminiKey, geminiModel]);
 
   useEffect(() => {
     // Listen to AssemblyAI events
@@ -59,7 +60,7 @@ function App() {
 
       if (geminiKey) {
         // Re-verify final translation to be sure
-        const translation = await translateText(text, geminiKey);
+        const translation = await translateText(text, geminiKey, geminiModel);
         setMessages(prev => prev.map(msg =>
           msg === newMessage ? { ...msg, translation: translation } : msg
         ));
@@ -70,7 +71,7 @@ function App() {
       unsubInterim();
       unsubFinal();
     };
-  }, [geminiKey, currentTranslation]);
+  }, [geminiKey, geminiModel, currentTranslation]);
 
   const handleToggleRecord = () => {
     if (isRecording) {
@@ -81,9 +82,11 @@ function App() {
     }
   };
 
-  const saveKey = (key) => {
+  const saveKey = (key, model) => {
     setGeminiKey(key);
+    setGeminiModel(model);
     localStorage.setItem('gemini_key', key);
+    localStorage.setItem('gemini_model', model);
     setShowSettings(false);
   };
 
@@ -134,7 +137,7 @@ function App() {
                     setMessages(prev => [...prev, newMessage]);
                     e.currentTarget.value = '';
                     // Translate
-                    const translation = await translateText(text, geminiKey);
+                    const translation = await translateText(text, geminiKey, geminiModel);
                     setMessages(prev => prev.map(msg =>
                       msg === newMessage ? { ...msg, translation: translation } : msg
                     ));
@@ -215,9 +218,16 @@ function App() {
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
             />
+            <input
+              type="text"
+              placeholder="Gemini Model (e.g., gemini-2.0-flash-exp)"
+              className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors mb-4"
+              value={geminiModel}
+              onChange={(e) => setGeminiModel(e.target.value)}
+            />
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-              <button onClick={() => saveKey(geminiKey)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+              <button onClick={() => saveKey(geminiKey, geminiModel)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
             </div>
           </div>
         </div>
