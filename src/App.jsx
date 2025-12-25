@@ -35,7 +35,7 @@ function App() {
       }
     };
 
-    const interval = setInterval(checkTranslation, 100); // Check every 100ms
+    const interval = setInterval(checkTranslation, 500); // Check every 500ms to avoid flooding API
     return () => clearInterval(interval);
   }, [currentTranscript, geminiKey]);
 

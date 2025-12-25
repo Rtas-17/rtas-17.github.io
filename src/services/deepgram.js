@@ -12,8 +12,9 @@ export class DeepgramService {
     connect(accessKey = DEEPGRAM_API_KEY) {
         if (this.socket) return;
 
-        // Using nova-3 generally for better multilingual code switching as requested.
-        this.socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&interim_results=true&diarize=false&language=multi', [
+        // Using nova-3 generally for better multilingual code switching.
+        // Added utterance_end_ms=1000 to prevent fragmentation and give model more context for detection.
+        this.socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&interim_results=true&diarize=false&language=multi&utterance_end_ms=1000', [
             'token',
             accessKey,
         ]);
