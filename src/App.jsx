@@ -186,7 +186,7 @@ function App() {
                 onChange={(e) => setAssemblyAIKey(e.target.value)}
               />
               <p className="text-xs text-text-muted mt-1">
-                Get your key from <a href="https://www.assemblyai.com/app/account" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AssemblyAI Dashboard</a>
+                Get your key from <a href="https://www.assemblyai.com/app/account" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" aria-label="AssemblyAI Dashboard (opens in new tab)">AssemblyAI Dashboard</a>
               </p>
             </div>
 
@@ -202,7 +202,7 @@ function App() {
                 onChange={(e) => setGeminiKey(e.target.value)}
               />
               <p className="text-xs text-text-muted mt-1">
-                Get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google AI Studio</a>
+                Get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" aria-label="Google AI Studio (opens in new tab)">Google AI Studio</a>
               </p>
             </div>
 
