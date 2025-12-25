@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Settings, Send, Globe, Sparkles } from 'lucide-react';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
-import { deepgramService } from './services/deepgram';
+import { assemblyAIService } from './services/assemblyai';
 import { translateText } from './services/gemini';
 import { LiveTranscript } from './components/LiveTranscript';
 
@@ -40,12 +40,12 @@ function App() {
   }, [currentTranscript, geminiKey]);
 
   useEffect(() => {
-    // Listen to Deepgram events
-    const unsubInterim = deepgramService.on('transcript_interim', (text) => {
+    // Listen to AssemblyAI events
+    const unsubInterim = assemblyAIService.on('transcript_interim', (text) => {
       setCurrentTranscript(text);
     });
 
-    const unsubFinal = deepgramService.on('transcript_final', async (text) => {
+    const unsubFinal = assemblyAIService.on('transcript_final', async (text) => {
       // Final Commit
       // We might have a currentTranslation that matches this text, or close to it.
       // Ideally we do one last authoritative translation.
@@ -149,14 +149,14 @@ function App() {
                   if (!file) return;
 
                   // Connect if not connected
-                  deepgramService.connect();
+                  await assemblyAIService.connect();
                   // Wait for connection
                   const waitForConnection = () => new Promise((resolve) => {
-                    if (deepgramService.socket?.readyState === WebSocket.OPEN) {
+                    if (assemblyAIService.socket?.readyState === WebSocket.OPEN) {
                       resolve();
                       return;
                     }
-                    const unsub = deepgramService.on('status', (status) => {
+                    const unsub = assemblyAIService.on('status', (status) => {
                       if (status === 'connected') {
                         unsub();
                         resolve();
@@ -172,7 +172,7 @@ function App() {
                     const chunkSize = 4096; // 4KB chunks
                     for (let i = 0; i < buffer.byteLength; i += chunkSize) {
                       const chunk = buffer.slice(i, i + chunkSize);
-                      deepgramService.sendAudio(chunk);
+                      assemblyAIService.sendAudio(chunk);
                       await new Promise(r => setTimeout(r, 50)); // Simulate stream timing
                     }
                   };
@@ -206,7 +206,7 @@ function App() {
             </h2>
             <p className="text-text-muted mb-4 text-sm">
               To enable AI translation, please enter your Google Gemini API Key.
-              <br />(Deepgram is pre-configured).
+              <br />(AssemblyAI is pre-configured).
             </p>
             <input
               type="password"
