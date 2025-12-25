@@ -22,16 +22,16 @@ export const initGemini = (apiKey) => {
     ai = new GoogleGenAI({ apiKey });
 };
 
-export const translateText = async (text, apiKey) => {
+export const translateText = async (text, apiKey, model = "gemini-2.0-flash-exp") => {
     if (!ai && apiKey) initGemini(apiKey);
     if (!ai) return null;
 
     try {
         const prompt = `${SYSTEM_PROMPT}\nInput: "${text}"`;
 
-        // Using gemini-2.0-flash-exp for speed as 2.5 was not found
+        // Using the specified model parameter
         const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash-exp",
+            model: model,
             contents: prompt,
             config: {
                 responseMimeType: "application/json"
