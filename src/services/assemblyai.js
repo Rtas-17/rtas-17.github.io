@@ -21,6 +21,35 @@ export class AssemblyAIService {
     }
 
     async getToken() {
+        // Check if we're on GitHub Pages
+        const isGitHubPages = typeof window !== 'undefined' && 
+                             window.location.hostname.endsWith('.github.io');
+        
+        // On GitHub Pages, use hardcoded API key directly
+        if (isGitHubPages) {
+            const hardcodedKey = 'cecc12bdb280498b9c5d37868bc79184';
+            try {
+                const response = await fetch(
+                    'https://streaming.assemblyai.com/v3/token?expires_in_seconds=500',
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': hardcodedKey
+                        }
+                    }
+                );
+                const data = await response.json();
+                if (data && data.token) {
+                    console.log('Successfully obtained token for GitHub Pages');
+                    return data.token;
+                }
+            } catch (error) {
+                console.error('Failed to get token using hardcoded API key:', error);
+                throw new Error('Failed to get AssemblyAI token: ' + error.message);
+            }
+        }
+        
+        // For Netlify/Vercel deployments, try the serverless function
         try {
             const response = await fetch(TOKEN_URL);
             const data = await response.json();
@@ -33,46 +62,40 @@ export class AssemblyAIService {
         } catch (error) {
             console.error('Failed to get token from server:', error);
             
-            // Fallback: Try to use hardcoded API key
-            const hardcodedKey = typeof localStorage !== 'undefined' 
+            // Fallback: Try localStorage API key
+            const localStorageKey = typeof localStorage !== 'undefined' 
                 ? localStorage.getItem('assemblyai_api_key') 
                 : null;
                 
-            if (hardcodedKey) {
-                console.log('Attempting to use hardcoded API key...');
+            if (localStorageKey) {
+                console.log('Attempting to use localStorage API key...');
                 try {
                     const response = await fetch(
                         'https://streaming.assemblyai.com/v3/token?expires_in_seconds=500',
                         {
                             method: 'GET',
                             headers: {
-                                'Authorization': hardcodedKey
+                                'Authorization': localStorageKey
                             }
                         }
                     );
                     const data = await response.json();
                     if (data && data.token) {
-                        console.log('Successfully obtained token using hardcoded API key');
+                        console.log('Successfully obtained token using localStorage API key');
                         return data.token;
                     }
                 } catch (fallbackError) {
-                    console.error('Failed to get token using hardcoded API key:', fallbackError);
+                    console.error('Failed to get token using localStorage API key:', fallbackError);
                 }
             }
             
-            // Provide user-friendly error message for common issues
-            if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-                const helpfulError = new Error(
-                    'Cannot connect to token server. ' +
-                    'For local development, run "npx netlify dev" instead of "npm run dev". ' +
-                    'For GitHub Pages deployment, set your API key with: localStorage.setItem("assemblyai_api_key", "YOUR_KEY_HERE"). ' +
-                    'For deployed apps, ensure the serverless function is configured. ' +
-                    'See CORS_PROXY_SETUP.md for details.'
-                );
-                helpfulError.originalError = error;
-                throw helpfulError;
-            }
-            throw error;
+            // Provide user-friendly error message
+            throw new Error(
+                'Cannot connect to token server. ' +
+                'For local development, run "npx netlify dev". ' +
+                'For GitHub Pages, the hardcoded key should work automatically. ' +
+                'See CORS_PROXY_SETUP.md for details.'
+            );
         }
     }
 
