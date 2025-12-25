@@ -15,59 +15,74 @@ export class AssemblyAIService {
             const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
                 method: 'POST',
                 headers: {
-                    'authorization': apiKey,
+                    'Authorization': apiKey,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ expires_in: 3600 })
             });
 
+            if (!response.ok) {
+                throw new Error(`Failed to get AssemblyAI token: ${response.status} ${response.statusText}`);
+            }
+
             const data = await response.json();
+            
+            if (!data.token) {
+                throw new Error('No token received from AssemblyAI');
+            }
+            
             const token = data.token;
 
             // Connect to AssemblyAI WebSocket with language detection and Arabic support
             // sample_rate=16000 is the default for browser audio
-            this.socket = new WebSocket(
-                `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`
-            );
+            // Return a promise that resolves when connection is established or rejects on error
+            return new Promise((resolve, reject) => {
+                this.socket = new WebSocket(
+                    `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`
+                );
 
-            this.socket.onopen = () => {
-                console.log('AssemblyAI Connected');
-                this.emit('status', 'connected');
-            };
+                this.socket.onopen = () => {
+                    console.log('AssemblyAI Connected');
+                    this.emit('status', 'connected');
+                    resolve();
+                };
 
-            this.socket.onmessage = (message) => {
-                const received = JSON.parse(message.data);
-                
-                if (received.message_type === 'SessionBegins') {
-                    this.sessionId = received.session_id;
-                    console.log('AssemblyAI session started:', this.sessionId);
-                } else if (received.message_type === 'PartialTranscript') {
-                    const transcript = received.text;
-                    if (transcript) {
-                        this.emit('transcript_interim', transcript);
+                this.socket.onmessage = (message) => {
+                    const received = JSON.parse(message.data);
+                    
+                    if (received.message_type === 'SessionBegins') {
+                        this.sessionId = received.session_id;
+                        console.log('AssemblyAI session started:', this.sessionId);
+                    } else if (received.message_type === 'PartialTranscript') {
+                        const transcript = received.text;
+                        if (transcript) {
+                            this.emit('transcript_interim', transcript);
+                        }
+                    } else if (received.message_type === 'FinalTranscript') {
+                        const transcript = received.text;
+                        if (transcript) {
+                            this.emit('transcript_final', transcript);
+                        }
                     }
-                } else if (received.message_type === 'FinalTranscript') {
-                    const transcript = received.text;
-                    if (transcript) {
-                        this.emit('transcript_final', transcript);
-                    }
-                }
-            };
+                };
 
-            this.socket.onclose = (event) => {
-                console.log(`AssemblyAI Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
-                this.socket = null;
-                this.sessionId = null;
-                this.emit('status', 'disconnected');
-            };
+                this.socket.onclose = (event) => {
+                    console.log(`AssemblyAI Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+                    this.socket = null;
+                    this.sessionId = null;
+                    this.emit('status', 'disconnected');
+                };
 
-            this.socket.onerror = (error) => {
-                console.error('AssemblyAI WebSocket Error:', error);
-                this.emit('error', error);
-            };
+                this.socket.onerror = (error) => {
+                    console.error('AssemblyAI WebSocket Error:', error);
+                    this.emit('error', error);
+                    reject(error);
+                };
+            });
         } catch (error) {
             console.error('Failed to connect to AssemblyAI:', error);
             this.emit('error', error);
+            throw error; // Re-throw to propagate the error
         }
     }
 
