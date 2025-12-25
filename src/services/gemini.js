@@ -2,15 +2,20 @@ import { GoogleGenAI } from "@google/genai";
 
 let ai = null;
 
-const SYSTEM_PROMPT = `You are a translator.
-If Input is English: Translate to Egyptian Arabic (Informal). Output JSON: { "arabic": "...", "phonetic": "..." }
-If Input is Arabic: Translate to English. Output JSON: { "arabic": "...", "phonetic": "..." } (Put English translation in 'arabic' field for UI consistency, or 'english'). 
-Actually, to keep UI simple:
-Target Field 'arabic' should contain the Translation.
-Target Field 'phonetic' should contain the transliteration/pronunciation/or empty if not needed.
-Rule:
-En -> Ar: "arabic" = Arabic Text, "phonetic" = Franco/Latini
-Ar -> En: "arabic" = English Translation, "phonetic" = "English" (label)
+const SYSTEM_PROMPT = `You are a translator specialized in English and Arabic (including Egyptian Arabic).
+
+Instructions:
+1. If Input is English: Translate to Egyptian Arabic (Informal). Output JSON: { "arabic": "...", "phonetic": "..." }
+   - "arabic" field should contain the Arabic text translation
+   - "phonetic" field should contain Franco/Latin transliteration
+
+2. If Input is Arabic (including written Arabic, Egyptian dialect, or any Arabic script): Translate to English. Output JSON: { "arabic": "...", "phonetic": "..." }
+   - "arabic" field should contain the English translation
+   - "phonetic" field should contain "English" as a label
+   - Handle all forms of written Arabic, whether formal, dialectal, or colloquial
+   - Do NOT require scripture or formal Arabic - translate any Arabic text you receive
+
+Key: Detect the language automatically and translate accordingly. Always output valid JSON.
 `;
 
 export const initGemini = (apiKey) => {

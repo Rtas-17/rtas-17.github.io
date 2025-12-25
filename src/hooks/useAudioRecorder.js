@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { deepgramService } from '../services/deepgram';
+import { assemblyAIService } from '../services/assemblyai';
 
 export function useAudioRecorder() {
     const [isRecording, setIsRecording] = useState(false);
@@ -13,19 +13,19 @@ export function useAudioRecorder() {
             // Setup listener for data
             mediaRecorder.current.addEventListener('dataavailable', event => {
                 if (event.data.size > 0 && mediaRecorder.current?.state === 'recording') {
-                    deepgramService.sendAudio(event.data);
+                    assemblyAIService.sendAudio(event.data);
                 }
             });
 
-            // Connect to Deepgram and wait for open
-            deepgramService.connect();
+            // Connect to AssemblyAI and wait for open
+            await assemblyAIService.connect();
 
             const waitForConnection = () => new Promise((resolve) => {
-                if (deepgramService.socket?.readyState === WebSocket.OPEN) {
+                if (assemblyAIService.socket?.readyState === WebSocket.OPEN) {
                     resolve();
                     return;
                 }
-                const unsub = deepgramService.on('status', (status) => {
+                const unsub = assemblyAIService.on('status', (status) => {
                     if (status === 'connected') {
                         unsub();
                         resolve();
@@ -49,7 +49,7 @@ export function useAudioRecorder() {
             }
             mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
             setIsRecording(false);
-            deepgramService.disconnect();
+            assemblyAIService.disconnect();
         }
     }, []);
 
