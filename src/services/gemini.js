@@ -31,7 +31,7 @@ export const translateText = async (text, apiKey, model = "gemini-2.0-flash-exp"
 
         // Using the specified model parameter
         const response = await ai.models.generateContent({
-            model: model,
+            model,
             contents: prompt,
             config: {
                 responseMimeType: "application/json"
