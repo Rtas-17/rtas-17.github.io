@@ -12,8 +12,9 @@ export class DeepgramService {
     connect(accessKey = DEEPGRAM_API_KEY) {
         if (this.socket) return;
 
-        // Using nova-2 general model with language detection.
-        this.socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&interim_results=true&diarize=false&detect_language=true', [
+        // Using nova-2 general model.
+        // detect_language=true caused connection failure (1006). Reverting to default en for stability.
+        this.socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&interim_results=true&diarize=false', [
             'token',
             accessKey,
         ]);
