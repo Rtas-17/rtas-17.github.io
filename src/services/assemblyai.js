@@ -3,7 +3,7 @@ const ASSEMBLYAI_API_KEY = 'cecc12bdb280498b9c5d37868bc79184';
 export class AssemblyAIService {
     constructor() {
         this.socket = null;
-        this.listeners = new Set();
+        this.listeners = {};
         this.sessionId = null;
     }
 
