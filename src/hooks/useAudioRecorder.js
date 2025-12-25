@@ -6,8 +6,9 @@ export function useAudioRecorder() {
     const mediaRecorder = useRef(null);
 
     const startRecording = useCallback(async () => {
+        let stream = null;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
             // Setup listener for data
@@ -25,9 +26,9 @@ export function useAudioRecorder() {
             setIsRecording(true);
         } catch (err) {
             console.error('Error starting recording:', err);
-            // Clean up on error
-            if (mediaRecorder.current) {
-                mediaRecorder.current.stream?.getTracks().forEach(track => track.stop());
+            // Clean up on error - stop any active media tracks
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
             }
             alert(`Failed to start recording: ${err.message || 'Unknown error'}`);
         }
