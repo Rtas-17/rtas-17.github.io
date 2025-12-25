@@ -25,11 +25,15 @@ This repository includes a Netlify Function that automatically proxies token req
 1. Sign up for a free [Netlify](https://netlify.com) account
 2. Click "Import project" → "Import from Git"  
 3. Select this repository
-4. Deploy! (Netlify will automatically use the included `netlify.toml` configuration)
-5. Your app will work immediately at `https://your-site.netlify.app`
+4. **Before deploying**, go to Site settings > Environment variables
+5. Add variable: `ASSEMBLYAI_API_KEY` with your API key value
+6. Deploy!
+7. Your app will work at `https://your-site.netlify.app`
+
+**Get your API key:** Sign up at [AssemblyAI](https://www.assemblyai.com/) and find it in your [Dashboard](https://www.assemblyai.com/app/account)
 
 **Advantages:**
-- Zero configuration needed
+- Zero code configuration needed
 - Free tier is generous
 - Automatic HTTPS
 - Global CDN
@@ -37,9 +41,24 @@ This repository includes a Netlify Function that automatically proxies token req
 
 ### Solution 2: Run Local Development with Backend
 
-For local development, you need to run a token server:
+For local development, you need to run a token server with your API key.
 
-**Option A: Simple Node.js Server**
+**Using Netlify CLI (Recommended for this project):**
+
+1. Create a `.env` file in the project root:
+   ```env
+   ASSEMBLYAI_API_KEY=your_api_key_here
+   ```
+
+2. Run with Netlify CLI:
+   ```bash
+   npm install
+   npx netlify dev
+   ```
+
+The app will run on `http://localhost:8888` with full functionality.
+
+**Alternative: Simple Node.js Server**
 
 Create `server/server.js`:
 ```javascript
@@ -57,7 +76,7 @@ app.get('/token', async (req, res) => {
   try {
     const response = await fetch(url, {
       headers: {
-        Authorization: process.env.ASSEMBLYAI_API_KEY || 'cecc12bdb280498b9c5d37868bc79184',
+        Authorization: process.env.ASSEMBLYAI_API_KEY,
       },
     });
     
@@ -90,18 +109,20 @@ For GitHub Pages users who want to keep using GitHub Pages:
 2. Go to Workers & Pages → Create Application → Create Worker  
 3. Name it `assemblyai-proxy`
 4. Replace the default code with contents from `cloudflare-worker.js` in this repo
-5. Click "Save and Deploy"
-6. Copy your worker URL (e.g., `https://assemblyai-proxy.your-subdomain.workers.dev`)
-7. In your browser console on the app, run:
+5. **Important**: Go to Settings > Variables and add `ASSEMBLYAI_API_KEY` as a secret
+6. Click "Save and Deploy"
+7. Copy your worker URL (e.g., `https://assemblyai-proxy.your-subdomain.workers.dev`)
+8. In your browser console on the app, run:
    ```javascript
    localStorage.setItem('assemblyai_token_url', 'https://assemblyai-proxy.your-subdomain.workers.dev');
    ```
-8. Reload the page and try again
+9. Reload the page and try again
 
 **Advantages:**
 - Keep using GitHub Pages
 - Cloudflare Workers are very fast (edge computing)
 - Free tier: 100,000 requests/day
+- Secure API key storage
 
 ### Solution 4: Deploy to Vercel
 
@@ -113,7 +134,7 @@ For GitHub Pages users who want to keep using GitHub Pages:
        return res.status(405).json({ error: 'Method not allowed' });
      }
 
-     const API_KEY = process.env.ASSEMBLYAI_API_KEY || 'cecc12bdb280498b9c5d37868bc79184';
+     const API_KEY = process.env.ASSEMBLYAI_API_KEY;
      const expiresInSeconds = 500;
      const url = `https://streaming.assemblyai.com/v3/token?expires_in_seconds=${expiresInSeconds}`;
 

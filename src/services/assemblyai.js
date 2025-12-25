@@ -2,15 +2,8 @@
 // Based on AssemblyAI's official realtime-react-example
 // https://github.com/AssemblyAI-Community/realtime-react-example
 
-// Detect environment and use appropriate Netlify function endpoint
-// Works for: Netlify production, Netlify CLI (port 8888), and can be overridden via localStorage
-const isNetlifyEnv = typeof window !== 'undefined' && (
-    window.location.hostname.includes('netlify.app') || 
-    window.location.hostname.includes('.netlify.live') ||
-    window.location.port === '8888' // Netlify CLI dev server
-);
-
 // Always default to Netlify function path (works for Netlify CLI and production)
+// Can be overridden via localStorage: localStorage.setItem('assemblyai_token_url', 'YOUR_URL')
 const defaultTokenUrl = '/.netlify/functions/assemblyai-token';
 
 const TOKEN_URL = typeof localStorage !== 'undefined' ? 
@@ -20,7 +13,6 @@ const TOKEN_URL = typeof localStorage !== 'undefined' ?
 // Log the configuration for debugging
 if (typeof window !== 'undefined') {
     console.log('AssemblyAI Token URL:', TOKEN_URL);
-    console.log('Netlify Environment:', isNetlifyEnv);
 }
 
 export class AssemblyAIService {
@@ -186,8 +178,7 @@ export class AssemblyAIService {
     }
 
     // Legacy method - no longer needed with v3 API
-    // eslint-disable-next-line no-unused-vars
-    sendAudio(audioData) {
+    sendAudio() {
         // Audio is now sent automatically via scriptProcessor
         console.warn('sendAudio is deprecated - audio is sent automatically');
     }

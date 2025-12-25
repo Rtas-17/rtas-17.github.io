@@ -24,9 +24,27 @@ async function handleRequest(request) {
   }
 
   try {
-    // Get API key from environment variable or use default
-    // You should set this as a secret in Cloudflare Workers
-    const apiKey = 'cecc12bdb280498b9c5d37868bc79184'
+    // Get API key from Cloudflare Worker secrets
+    // Set in Workers dashboard: Settings > Variables > Add variable
+    // For development, you can temporarily hardcode it here (NOT FOR PRODUCTION!)
+    // const apiKey = 'YOUR_API_KEY_HERE'
+    
+    // In production, use environment variables/secrets
+    // eslint-disable-next-line no-undef
+    const apiKey = typeof ASSEMBLYAI_API_KEY !== 'undefined' ? ASSEMBLYAI_API_KEY : null
+    
+    if (!apiKey) {
+      return new Response(JSON.stringify({ 
+        error: 'ASSEMBLYAI_API_KEY not configured',
+        message: 'Please set the API key as a Worker secret'
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      })
+    }
 
     // Use v3 API endpoint (matching official example)
     const expiresInSeconds = 500

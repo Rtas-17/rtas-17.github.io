@@ -2,17 +2,28 @@
 
 This project provides real-time voice translation from English to Egyptian Arabic using AssemblyAI for speech recognition and Google Gemini for translation.
 
-## ⚠️ Important: CORS Proxy Required
+## ⚠️ Important: Configuration Required
 
-If you see the error **"failed to start recording: failed to fetch"**, this is because AssemblyAI's API requires a server-side proxy for security reasons. 
+### Setting Up Your AssemblyAI API Key
 
-**Quick Fix**: Deploy to Netlify (free) instead of GitHub Pages:
-1. Fork this repository
-2. Sign up at [Netlify](https://netlify.com)
-3. Import your fork and deploy
-4. Done! The included Netlify Function will handle the proxy automatically
+This application requires an AssemblyAI API key. You need to configure it as an environment variable:
 
-For other solutions, see [CORS_PROXY_SETUP.md](./CORS_PROXY_SETUP.md).
+**For Netlify:**
+1. Go to Site settings > Environment variables
+2. Add variable: `ASSEMBLYAI_API_KEY` = your API key
+3. Redeploy the site
+
+**For Local Development (Netlify CLI):**
+Create a `.env` file in the project root:
+```env
+ASSEMBLYAI_API_KEY=your_api_key_here
+```
+
+**Get your API key:** [AssemblyAI Dashboard](https://www.assemblyai.com/app/account)
+
+### Common Error
+
+If you see **"failed to start recording: failed to fetch"** or **"ASSEMBLYAI_API_KEY environment variable not set"**, it means the API key is not configured properly.
 
 ## Features
 
