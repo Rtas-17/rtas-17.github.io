@@ -29,9 +29,16 @@ async function handleRequest(request) {
     // For development, you can temporarily hardcode it here (NOT FOR PRODUCTION!)
     // const apiKey = 'YOUR_API_KEY_HERE'
     
-    // In production, use environment variables/secrets
-    // eslint-disable-next-line no-undef
-    const apiKey = typeof ASSEMBLYAI_API_KEY !== 'undefined' ? ASSEMBLYAI_API_KEY : null
+    // In production, check for the environment variable
+    // ASSEMBLYAI_API_KEY should be set as a Worker secret
+    let apiKey = null;
+    try {
+      // This will be defined if set as a Worker environment variable/secret
+      apiKey = ASSEMBLYAI_API_KEY;
+    } catch (e) {
+      // Variable not defined
+      apiKey = null;
+    }
     
     if (!apiKey) {
       return new Response(JSON.stringify({ 

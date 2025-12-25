@@ -10,11 +10,6 @@ const TOKEN_URL = typeof localStorage !== 'undefined' ?
     (localStorage.getItem('assemblyai_token_url') || defaultTokenUrl) : 
     defaultTokenUrl;
 
-// Log the configuration for debugging
-if (typeof window !== 'undefined') {
-    console.log('AssemblyAI Token URL:', TOKEN_URL);
-}
-
 export class AssemblyAIService {
     constructor() {
         this.socket = null;
@@ -177,10 +172,11 @@ export class AssemblyAIService {
         this.cleanup();
     }
 
-    // Legacy method - no longer needed with v3 API
+    // Deprecated: sendAudio is no longer used with v3 API
+    // Audio is automatically streamed via AudioContext
+    // This method is kept for backwards compatibility but does nothing
     sendAudio() {
-        // Audio is now sent automatically via scriptProcessor
-        console.warn('sendAudio is deprecated - audio is sent automatically');
+        throw new Error('sendAudio is deprecated in v3 API. Audio is automatically streamed via AudioContext.');
     }
 
     on(event, callback) {

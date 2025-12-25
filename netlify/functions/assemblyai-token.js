@@ -31,7 +31,6 @@ export async function handler(event) {
   try {
     // Get API key from environment variable
     // For Netlify: Set in dashboard under Site settings > Environment variables
-    // eslint-disable-next-line no-undef
     const API_KEY = process.env.ASSEMBLYAI_API_KEY;
     
     if (!API_KEY) {

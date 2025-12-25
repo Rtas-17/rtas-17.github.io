@@ -78,14 +78,14 @@ Similar to Netlify, but you'll need to create an `api/assemblyai-token.js` file.
 
 ### API Keys
 
-- **AssemblyAI**: Hardcoded in `src/services/assemblyai.js` (consider using environment variables)
-- **Google Gemini**: Configured through the app's settings UI
+- **Google Gemini**: Configured through the app's settings UI (for translation)
+- **AssemblyAI**: Must be set as environment variable (see configuration section above)
 
 ### Custom Proxy URL
 
-To use a custom CORS proxy:
+To use a custom proxy or token server:
 ```javascript
-localStorage.setItem('assemblyai_proxy_url', 'YOUR_PROXY_URL');
+localStorage.setItem('assemblyai_token_url', 'YOUR_PROXY_URL');
 ```
 
 ## React + Vite
