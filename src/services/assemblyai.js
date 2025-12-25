@@ -23,7 +23,7 @@ export class AssemblyAIService {
     async getToken() {
         // Check if we're on GitHub Pages
         const isGitHubPages = typeof window !== 'undefined' && 
-                             window.location.hostname.includes('github.io');
+                             window.location.hostname.endsWith('.github.io');
         
         // On GitHub Pages, use hardcoded API key directly
         if (isGitHubPages) {
