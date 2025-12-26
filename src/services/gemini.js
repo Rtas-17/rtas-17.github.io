@@ -4,13 +4,12 @@ let ai = null;
 
 const SYSTEM_PROMPT = `You are a translator.
 If Input is English: Translate to Egyptian Arabic (Informal). Output JSON: { "arabic": "...", "phonetic": "..." }
-If Input is Arabic: Translate to English. Output JSON: { "arabic": "...", "phonetic": "..." } (Put English translation in 'arabic' field for UI consistency, or 'english'). 
-Actually, to keep UI simple:
+If Input is Arabic: Translate to English. Output JSON: { "arabic": "...", "phonetic": "..." } 
 Target Field 'arabic' should contain the Translation.
-Target Field 'phonetic' should contain the transliteration/pronunciation/or empty if not needed.
+Target Field 'phonetic' should contain the transliteration/pronunciation (Franco/Latini).
 Rule:
-En -> Ar: "arabic" = Arabic Text, "phonetic" = Franco/Latini
-Ar -> En: "arabic" = English Translation, "phonetic" = "English" (label)
+En -> Ar: "arabic" = Arabic Text, "phonetic" = Phonetic of Arabic Text
+Ar -> En: "arabic" = English Translation, "phonetic" = Phonetic of Arabic Input
 `;
 
 export const initGemini = (apiKey) => {
