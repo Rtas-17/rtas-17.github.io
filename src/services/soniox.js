@@ -38,6 +38,8 @@ export class SonioxService {
             };
         }
 
+        this.targetLanguage = targetLanguage;
+
         try {
             await this.client.start({
                 model: model,
@@ -66,14 +68,26 @@ export class SonioxService {
                     let sentenceCompleted = false;
 
                     result.tokens.forEach(token => {
+                        // Debug log to understand what we are receiving
+                        // console.log(`Token: "${token.text}" lang: ${token.language} final: ${token.is_final}`);
+
+                        // Filter by Target Language if translation is active
+                        // If targetLanguage is set, Soniox adds source AND target tokens to the stream.
+                        // We only want the target tokens.
+                        if (this.targetLanguage && token.language && token.language !== this.targetLanguage) {
+                            return;
+                        }
+
                         if (token.is_final) {
                             if (token.text === '<end>') {
                                 sentenceCompleted = true;
                             } else {
-                                this.finalBuffer += token.text + ' ';
+                                // Assuming token.text has proper spacing or we rely on UI to handle it.
+                                // Soniox demo uses token.text directly.
+                                this.finalBuffer += token.text;
                             }
                         } else {
-                            interimStr += token.text + ' ';
+                            interimStr += token.text;
                         }
                     });
 
