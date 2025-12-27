@@ -560,7 +560,7 @@ function App() {
       {
         showSettings && (
           <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl max-h-[85dvh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Sparkles className="text-primary" /> App Settings
               </h2>
