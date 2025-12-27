@@ -435,7 +435,7 @@ function App() {
   };
 
   return (
-    <div className="h-[100dvh] w-screen bg-background text-text-main flex flex-col font-sans overflow-hidden pt-[env(safe-area-inset-top)]">
+    <div className="fixed inset-0 w-full bg-background text-text-main flex flex-col font-sans overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       {/* Header */}
       <header className="px-6 py-4 border-b border-border bg-surface/50 backdrop-blur-md flex items-center justify-between sticky top-0 z-20 shrink-0">
         <div className="flex items-center gap-3">
