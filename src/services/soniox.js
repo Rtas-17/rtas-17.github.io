@@ -15,18 +15,19 @@ export class SonioxService {
     /**
      * Connects and starts the transcription session with Two-Way Translation.
      */
-    async start(primLang = 'en', secLang = 'ar') {
+    async start(primLang = 'en', secLang = 'ar', enableDiarization = false, audioStream = null, enableTranslation = true) {
         if (this.client) {
             await this.stop();
         }
 
-        console.log(`[Soniox] Starting Two-Way Session: ${primLang} <-> ${secLang}`);
+        console.log(`[Soniox] Starting Session: ${primLang} <-> ${secLang}, Diarization: ${enableDiarization}, Stream: ${!!audioStream}, Translation: ${enableTranslation}`);
 
         this.primary = primLang;
         this.secondary = secLang;
         this.bufferA = '';
         this.bufferB = '';
         this.currentSentenceLang = null;
+        this.currentSentenceSpeaker = null;
 
         this.client = new SonioxClient({
             apiKey: SONIOX_API_KEY,
@@ -35,19 +36,20 @@ export class SonioxService {
         // 'stt-rt-v3' is used for the audio model, translation handles the rest
         const model = 'stt-rt-v3';
 
-        const translationConfig = {
+        const translationConfig = enableTranslation ? {
             type: 'two_way',
             language_a: primLang,
             language_b: secLang
-        };
+        } : undefined;
 
-        console.log('[Soniox] Config:', { model, translationConfig });
+        console.log('[Soniox] Config:', { model, translationConfig, enableDiarization });
 
         try {
             await this.client.start({
                 model: model,
+                stream: audioStream, // Use provided stream or default to mic
                 enableLanguageIdentification: true,
-                enableSpeakerDiarization: true,
+                enableSpeakerDiarization: enableDiarization,
                 enableEndpointDetection: true,
                 translation: translationConfig,
 
@@ -84,22 +86,33 @@ export class SonioxService {
                         }
                     }
 
+                    // Sticky Speaker: Detect who started the sentence
+                    if (enableDiarization && !this.currentSentenceSpeaker && result.tokens.length > 0) {
+                        const firstSpeakerToken = result.tokens.find(t => t.speaker);
+                        if (firstSpeakerToken) {
+                            this.currentSentenceSpeaker = firstSpeakerToken.speaker;
+                        }
+                    }
+
                     result.tokens.forEach(token => {
+                        // Default to Primary language if not specified (Standard STT mode)
+                        const tokenLang = token.language || this.primary;
+
                         if (token.is_final) {
                             if (token.text === '<end>') {
                                 sentenceCompleted = true;
                             } else {
-                                if (token.language === this.primary) {
-                                    this.bufferA += token.text; // Removed + ' '
-                                } else if (token.language === this.secondary) {
-                                    this.bufferB += token.text; // Removed + ' '
+                                if (tokenLang === this.primary) {
+                                    this.bufferA += token.text;
+                                } else if (tokenLang === this.secondary) {
+                                    this.bufferB += token.text;
                                 }
                             }
                         } else {
                             // Interim tokens
-                            if (token.language === this.primary) {
+                            if (tokenLang === this.primary) {
                                 interimA += token.text;
-                            } else if (token.language === this.secondary) {
+                            } else if (tokenLang === this.secondary) {
                                 interimB += token.text;
                             }
                         }
@@ -122,20 +135,23 @@ export class SonioxService {
                         const finalA = this.bufferA.trim();
                         const finalB = this.bufferB.trim();
                         const finalDetected = this.currentSentenceLang || this.primary;
+                        const finalSpeaker = this.currentSentenceSpeaker;
 
                         if (finalA || finalB) {
-                            console.log('[Soniox] Final:', { finalA, finalB, detected: finalDetected });
+                            console.log('[Soniox] Final:', { finalA, finalB, detected: finalDetected, speaker: finalSpeaker });
 
                             this.emit('transcript_final', {
                                 textA: finalA,
                                 textB: finalB,
-                                detectedLanguage: finalDetected
+                                detectedLanguage: finalDetected,
+                                speaker: finalSpeaker
                             });
                         }
 
                         this.bufferA = '';
                         this.bufferB = '';
                         this.currentSentenceLang = null; // Reset for next sentence
+                        this.currentSentenceSpeaker = null;
                     }
                 }
             });

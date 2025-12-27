@@ -52,25 +52,73 @@ export const initGemini = (apiKey) => {
     ai = new GoogleGenAI({ apiKey });
 };
 
+// Hardcoded Fallback Models
+const FALLBACK_MODELS = [
+    { name: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash Lite (Fallback)" },
+    { name: "gemini-2.0-flash-lite-preview-02-05", displayName: "Gemini 2.0 Flash Lite (Preview)" },
+    { name: "gemini-1.5-flash", displayName: "Gemini 1.5 Flash (Fallback)" },
+    { name: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro (Fallback)" }
+];
+
 export const getAvailableModels = async (apiKey) => {
+    console.log("[Gemini] Fetching models...");
     if (!ai && apiKey) initGemini(apiKey);
-    if (!ai) return [];
+
+    // If Init failed, use Fallback
+    if (!ai) {
+        console.warn("[Gemini] AI not initialized. Returning fallback.");
+        return FALLBACK_MODELS;
+    }
+
     try {
         const response = await ai.models.list();
-        const rawModels = response.models || response;
-        const models = Array.isArray(rawModels) ? rawModels : (rawModels && typeof rawModels === 'object' ? Object.values(rawModels) : []);
+        console.log("[Gemini] API Response:", response);
 
-        if (!Array.isArray(models)) return [];
+        // Handle Pager object from SDK
+        // Check for .models (standard), .page (Pager), or pure array
+        let rawModels = [];
+        if (response.models) {
+            rawModels = response.models;
+        } else if (response.page) {
+            rawModels = response.page;
+        } else if (Array.isArray(response)) {
+            rawModels = response;
+        } else if (typeof response === 'object') {
+            // Fallback: try to see if it behaves like an array or has internal page
+            rawModels = response.pageInternal || Object.values(response);
+        }
 
-        return models
-            .filter(m => m && m.supportedGenerationMethods && Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-            .map(m => ({
-                name: m.name.replace('models/', ''),
-                displayName: m.displayName || m.name
-            }));
+        const models = Array.isArray(rawModels) ? rawModels : [];
+        console.log("[Gemini] Extracted Models:", models);
+
+        if (models.length === 0) {
+            console.warn("[Gemini] Empty model list. Returning fallback.");
+            return FALLBACK_MODELS;
+        }
+
+        // Debug: Log first model structure
+        if (models.length > 0) {
+            console.log("[Gemini] First Model Structure:", models[0]);
+        }
+
+        // User requested ALL models
+        const filtered = models.map(m => ({
+            name: m.name.replace('models/', ''),
+            displayName: m.displayName || m.name
+        }));
+
+        console.log(`[Gemini] Total: ${models.length}, Filtered: ${filtered.length}`);
+
+        if (filtered.length === 0) {
+            console.warn("[Gemini] No generateContent models found. Returning fallback.");
+            return FALLBACK_MODELS;
+        }
+
+        return filtered;
+
     } catch (e) {
         console.error("Failed to list models:", e);
-        return [];
+        return FALLBACK_MODELS;
     }
 };
 

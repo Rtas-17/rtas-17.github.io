@@ -1,8 +1,66 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, Pencil } from 'lucide-react';
 
-export function LiveTranscript({ messages, currentTranscript, currentTranslation }) {
+const SpeakerBadge = ({ speakerId, name, onRename }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempName, setTempName] = useState(name);
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (tempName.trim()) {
+            onRename(tempName.trim());
+        } else {
+            setTempName(name); // Revert if empty
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Escape') {
+            setTempName(name);
+            setIsEditing(false);
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <input
+                ref={inputRef}
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                onBlur={handleSave}
+                onKeyDown={handleKeyDown}
+                className="text-xs font-bold text-primary mb-1 block uppercase tracking-wider bg-transparent border-b border-primary outline-none min-w-[60px]"
+            />
+        );
+    }
+
+    return (
+        <span
+            className="text-xs font-bold text-primary mb-1 block uppercase tracking-wider cursor-pointer hover:underline flex items-center gap-2 group"
+            onDoubleClick={() => setIsEditing(true)}
+            onContextMenu={(e) => { e.preventDefault(); setIsEditing(true); }} // Long tap often triggers context menu on mobile
+            onTouchEnd={(e) => {
+                // Simple double tap simulation or long press could be complex. 
+                // ContextMenu is a safe bet for "Long Press" on many mobile browsers.
+                // Alternatively, we can just use a small edit icon.
+            }}
+        >
+            {name}
+            <Pencil size={10} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+        </span>
+    );
+};
+
+export function LiveTranscript({ messages, currentTranscript, currentTranslation, speakerNames = {}, onRenameSpeaker }) {
     const bottomRef = useRef(null);
 
     useEffect(() => {
@@ -17,6 +75,13 @@ export function LiveTranscript({ messages, currentTranscript, currentTranslation
                         "p-4 rounded-2xl shadow-lg border border-border/50",
                         msg.role === 'user' ? "bg-surface text-text-main rounded-tr-sm" : "bg-primary/10 text-text-main rounded-tl-sm"
                     )}>
+                        {msg.speaker && (
+                            <SpeakerBadge
+                                speakerId={msg.speaker}
+                                name={speakerNames[msg.speaker] || `Speaker ${msg.speaker}`}
+                                onRename={(newName) => onRenameSpeaker(msg.speaker, newName)}
+                            />
+                        )}
                         <p className="text-lg font-medium leading-relaxed">{msg.text}</p>
 
                         {msg.translation && (
