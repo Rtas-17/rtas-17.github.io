@@ -13,61 +13,149 @@ function App() {
   const [currentTranslation, setCurrentTranslation] = useState(null);
   const lastTranslatedTextRef = useRef('');
   const isTranslatingRef = useRef(false);
+
+  // Settings
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [modelList, setModelList] = useState([]);
   const [selectedModel, setSelectedModel] = useState(localStorage.getItem('gemini_model') || 'gemini-3-flash-preview');
-  const [inputLanguage, setInputLanguage] = useState('en');
-  const [showSettings, setShowSettings] = useState(!geminiKey);
+
+  // Language Configuration (Bi-directional Pair)
+  const [primaryLanguage, setPrimaryLanguage] = useState(localStorage.getItem('primary_lang') || 'en');
+  const [secondaryLanguage, setSecondaryLanguage] = useState(localStorage.getItem('secondary_lang') || 'ar');
+  const [geminiEnabled, setGeminiEnabled] = useState(localStorage.getItem('gemini_enabled') !== 'false'); // Default true
+  const [transliterationStyle, setTransliterationStyle] = useState(localStorage.getItem('gemini_style') || 'clean');
+  const [useContextualTranslation, setUseContextualTranslation] = useState(localStorage.getItem('use_contextual') === 'true');
+
+  const [showSettings, setShowSettings] = useState(!geminiKey && geminiEnabled);
 
   useEffect(() => {
-    if (geminiKey) {
+    if (geminiKey && geminiEnabled) {
       initGemini(geminiKey);
       getAvailableModels(geminiKey).then(models => {
         if (models && models.length > 0) setModelList(models);
       });
     }
-  }, [geminiKey]);
+  }, [geminiKey, geminiEnabled]);
 
   useEffect(() => {
-    // Debounce Interim Translation (Keep this for MANUAL TEXT input only)
-    const timer = setTimeout(async () => {
-      if (currentTranscript && currentTranscript !== lastTranslatedTextRef.current && !isTranslatingRef.current && geminiKey) {
-        // We only use Gemini for bouncing manual typing or if voice didn't translate.
-        // But for now, we assume Voice uses Soniox.
+    // Listen to Soniox events (Two-Way Native)
+    const unsubFinal = sonioxService.on('transcript_final', async (data) => {
+      // data: { textA, textB, detectedLanguage }
+
+      console.log('[App] Final:', data);
+
+      let sourceText = '';
+      let targetText = '';
+      let detectedLanguage = 'auto'; // Default to auto or safe value
+
+      // Support legacy string emit just in case, though soniox.js is updated
+      if (typeof data === 'string') {
+        sourceText = data;
+        targetText = '';
+        detectedLanguage = 'auto';
+      } else {
+        const { textA, textB } = data;
+        // Assign to outer let
+        detectedLanguage = data.detectedLanguage;
+
+        // Determine Source vs Target based on Detection
+        // If Detected == Primary, Primary=Source
+        if (detectedLanguage === primaryLanguage) {
+          sourceText = textA;
+          targetText = textB;
+        } else {
+          sourceText = textB;
+          targetText = textA;
+        }
       }
-    }, 1000);
 
-    return () => clearTimeout(timer);
-  }, [currentTranscript, geminiKey, selectedModel]);
+      // Create Message immediately with Native Translation
+      const newMessage = {
+        role: 'user',
+        text: sourceText,
+        translation: { arabic: targetText, phonetic: '' }
+      };
 
-  useEffect(() => {
-    // Listen to Soniox events
-    const unsubFinal = sonioxService.on('transcript_final', async (text) => {
-      console.log('[App] Final Transcript (Soniox):', text);
-
-      const newMessage = { role: 'user', text: text, translation: null };
       setMessages(prev => [...prev, newMessage]);
 
       setCurrentTranscript('');
       setCurrentTranslation(null);
       lastTranslatedTextRef.current = '';
 
-      // Async: Call Gemini for Phonetics (and backup/reverse translation)
-      // This runs for BOTH Arabic (to get phonetics+English) and English (to get Arabic+phonetics)
-      if (geminiKey) {
+      // Async: Call Gemini for Phonetics OR Contextual Translation (if enabled)
+      if (geminiKey && geminiEnabled) {
         try {
-          const result = await translateText(text, geminiKey, selectedModel);
-          setMessages(prev => prev.map(msg =>
-            msg === newMessage ? { ...msg, translation: result } : msg
-          ));
+          if (useContextualTranslation) {
+            // MODE: Contextual Translation (Override Soniox Translation)
+            // We want to translate from Source -> Target using Gemini
+            const targetLang = (primaryLanguage === detectedLanguage) ? secondaryLanguage : primaryLanguage;
+
+            const result = await translateText(
+              sourceText,
+              geminiKey,
+              selectedModel,
+              detectedLanguage,
+              targetLang,
+              transliterationStyle,
+              true // useContextual
+            );
+
+            setMessages(prev => prev.map(msg =>
+              msg === newMessage ? {
+                ...msg,
+                translation: {
+                  arabic: result.arabic, // Contextual Translation
+                  phonetic: result.phonetic // Phonetic of (Source or Target depending on prompt logic)
+                }
+              } : msg
+            ));
+
+          } else {
+            // MODE: Standard (Phonetics Only - Keep Soniox Translation)
+            // We want phonetics for the ARABIC portion.
+            let textToPhonetize = '';
+            if (primaryLanguage === 'ar') textToPhonetize = (detectedLanguage === 'ar') ? sourceText : targetText;
+            else if (secondaryLanguage === 'ar') textToPhonetize = (detectedLanguage === 'ar') ? sourceText : targetText;
+
+            // Fallback if neither is explicit 'ar' but one key is 'ar'
+            if (!textToPhonetize) {
+              // Check simple cases
+              if (detectedLanguage === 'ar') textToPhonetize = sourceText;
+              else textToPhonetize = targetText; // Assume target is Ar if source is En
+            }
+
+            if (textToPhonetize) {
+              // We misuse translateText to get phonetics.
+              // We pass source='ar', target='en'. 
+              const result = await translateText(textToPhonetize, geminiKey, selectedModel, 'ar', 'en', transliterationStyle, false);
+
+              setMessages(prev => prev.map(msg =>
+                msg === newMessage ? {
+                  ...msg,
+                  translation: {
+                    arabic: targetText, // Keep Soniox Native
+                    phonetic: result.phonetic
+                  }
+                } : msg
+              ));
+            }
+          }
         } catch (err) {
-          console.error("Gemini Phonetic Error:", err);
+          console.error("Gemini Error:", err);
         }
       }
     });
 
-    const unsubInterim = sonioxService.on('transcript_interim', (text) => {
-      setCurrentTranscript(text);
+    const unsubInterim = sonioxService.on('transcript_interim', (data) => {
+      // Support object or string
+      if (typeof data === 'string') {
+        setCurrentTranscript(data);
+      } else {
+        // data: { primary, secondary, detected }
+        // Show Source
+        const showText = (data.detected === primaryLanguage) ? data.primary : data.secondary;
+        setCurrentTranscript(showText || data.primary || data.secondary);
+      }
     });
 
     const unsubStatus = sonioxService.on('status', (status) => {
@@ -84,30 +172,39 @@ function App() {
       unsubStatus();
       unsubError();
     };
-  }, [geminiKey, selectedModel]);
+  }, [geminiKey, selectedModel, primaryLanguage, secondaryLanguage, geminiEnabled, transliterationStyle]);
 
   const handleToggleRecord = () => {
-    console.log('[UI] Toggle Record Clicked', { isRecording, inputLanguage });
     if (isRecording) {
       stopRecording();
     } else {
-      // Determine Configuration
-      // Ar Input: No Soniox Translation (we want the Arabic text).
-      // En Input: Soniox Translation to Arabic (we want the Arabic text).
-      // Auto: Default to En/Ar -> Ar? Let's assume Auto targets Ar for now to see cool phonetics.
-
-      let targetLang = null;
-      if (inputLanguage === 'en') targetLang = 'ar';
-      // if (inputLanguage === 'ar') targetLang = null; // Explicitly null to get source Arabic
-
-      // Start Soniox
-      startRecording(inputLanguage, targetLang);
+      // Start Soniox with configured pair
+      startRecording(primaryLanguage, secondaryLanguage);
     }
   };
 
-  const saveKey = (key) => {
+  const saveSettings = (key, prim, sec, enabled, model, style, contextual) => {
     setGeminiKey(key);
     localStorage.setItem('gemini_key', key);
+
+    setPrimaryLanguage(prim);
+    localStorage.setItem('primary_lang', prim);
+
+    setSecondaryLanguage(sec);
+    localStorage.setItem('secondary_lang', sec);
+
+    setGeminiEnabled(enabled);
+    localStorage.setItem('gemini_enabled', enabled);
+
+    setSelectedModel(model);
+    localStorage.setItem('gemini_model', model);
+
+    setTransliterationStyle(style);
+    localStorage.setItem('gemini_style', style);
+
+    setUseContextualTranslation(contextual);
+    localStorage.setItem('use_contextual', contextual);
+
     setShowSettings(false);
   };
 
@@ -137,36 +234,7 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 relative flex flex-col min-h-0">
-        {/* Language Toggle */}
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-black/60 backdrop-blur-md rounded-full p-1 flex border border-white/10 shadow-2xl">
-          <button
-            onClick={() => setInputLanguage('en')}
-            className={clsx(
-              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
-              inputLanguage === 'en' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
-            )}
-          >
-            🇺🇸 English
-          </button>
-          <button
-            onClick={() => setInputLanguage('auto')}
-            className={clsx(
-              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
-              inputLanguage === 'auto' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
-            )}
-          >
-            🤖 Auto
-          </button>
-          <button
-            onClick={() => setInputLanguage('ar')}
-            className={clsx(
-              "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
-              inputLanguage === 'ar' ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white"
-            )}
-          >
-            🇪🇬 Arabic
-          </button>
-        </div>
+        {/* Floating Language Toggles REMOVED as requested */}
 
         <LiveTranscript messages={messages} currentTranscript={currentTranscript} currentTranslation={currentTranslation} />
 
@@ -187,7 +255,7 @@ function App() {
                     setMessages(prev => [...prev, newMessage]);
                     e.currentTarget.value = '';
                     // Translate (Text still uses Gemini)
-                    const translation = await translateText(text, geminiKey, selectedModel);
+                    const translation = await translateText(text, geminiKey, selectedModel, 'auto', secondaryLanguage, transliterationStyle, useContextualTranslation);
                     setMessages(prev => prev.map(msg =>
                       msg === newMessage ? { ...msg, translation: translation } : msg
                     ));
@@ -215,36 +283,110 @@ function App() {
         </div>
       </main >
 
-      {/* Settings Modal - kept for Gemini Key (used for text input) */}
+      {/* Settings Modal */}
       {
         showSettings && (
           <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-surface border border-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Sparkles className="text-primary" /> Setup Translation
+                <Sparkles className="text-primary" /> App Settings
               </h2>
-              <p className="text-text-muted mb-4 text-sm">
-                To enable AI translation (for text input), please enter your Google Gemini API Key.
-                <br />(Soniox handles voice translation).
-              </p>
+
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm text-gray-400">Gemini API Key</label>
-                  <input
-                    type="password"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
-                    placeholder="Paste your Gemini API Key..."
-                    value={geminiKey}
-                    onChange={(e) => {
-                      setGeminiKey(e.target.value);
-                      localStorage.setItem('gemini_key', e.target.value);
-                    }}
-                  />
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                  <span className="text-sm font-medium">Enable Gemini (Phonetics)</span>
+                  <button
+                    onClick={() => setGeminiEnabled(!geminiEnabled)}
+                    className={`w-12 h-6 rounded-full transition-colors relative ${geminiEnabled ? 'bg-primary' : 'bg-gray-600'}`}
+                  >
+                    <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${geminiEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </button>
                 </div>
-                {/* ... model list omitted for brevity, assuming existing logic persists ... */}
+
+                {geminiEnabled && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">Gemini API Key</label>
+                      <input
+                        type="password"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                        placeholder="Required for Phonetics..."
+                        value={geminiKey}
+                        onChange={(e) => setGeminiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">Gemini Model ID</label>
+                      <input
+                        type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                        placeholder="e.g. gemini-1.5-flash"
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">Transliteration Style</label>
+                      <select
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                        value={transliterationStyle}
+                        onChange={(e) => setTransliterationStyle(e.target.value)}
+                      >
+                        <option value="clean">Standard (Clean)</option>
+                        <option value="precise">Precise (Symbols)</option>
+                        <option value="franco">Franco (Arabizi)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-white">Contextual Translation</span>
+                        <span className="text-xs text-gray-400">Slower, but uses Egyptian dialect/tone.</span>
+                      </div>
+                      <button
+                        onClick={() => setUseContextualTranslation(!useContextualTranslation)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${useContextualTranslation ? 'bg-primary' : 'bg-gray-600'}`}
+                      >
+                        <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${useContextualTranslation ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-400">Primary Language</label>
+                    <select
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                      value={primaryLanguage}
+                      onChange={(e) => setPrimaryLanguage(e.target.value)}
+                    >
+                      <option value="en">🇺🇸 English</option>
+                      <option value="ar">🇪🇬 Arabic</option>
+                      <option value="fr">🇫🇷 French</option>
+                      <option value="es">🇪🇸 Spanish</option>
+                      <option value="de">🇩🇪 German</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-400">Secondary Language</label>
+                    <select
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary/50"
+                      value={secondaryLanguage}
+                      onChange={(e) => setSecondaryLanguage(e.target.value)}
+                    >
+                      <option value="ar">🇪🇬 Arabic</option>
+                      <option value="en">🇺🇸 English</option>
+                      <option value="fr">🇫🇷 French</option>
+                      <option value="es">🇪🇸 Spanish</option>
+                      <option value="de">🇩🇪 German</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-3 mt-6">
                   <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-                  <button onClick={() => saveKey(geminiKey)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+                  <button onClick={() => saveSettings(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
                 </div>
               </div>
             </div>
