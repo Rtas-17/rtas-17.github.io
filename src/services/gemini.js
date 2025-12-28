@@ -26,6 +26,16 @@ const getPhoneticInstruction = (style) => {
    - Use numbers for sounds: '2' (Hamza), '3' (Ayn), '5' (Kha), '7' (Ha), '9' (Sad/Qaf).
    - Example: "Salam 3alaykom", "Sob7an Allah".`;
 
+        case 'ipa':
+            return `   - Style: **International Phonetic Alphabet (IPA)**.
+   - Use standard IPA symbols (e.g., /ħ/, /ʕ/, /q/, /ʔ/).
+   - Ensure strict adherence to accurate phonology.`;
+
+        case 'upa':
+            return `   - Style: **Universal Phonetic Alphabet (UPA)**.
+   - Use UPA notation where distinct from IPA.
+   - Example: using dots or specific diacritics as defined in UPA standards for Semitic languages.`;
+
         case 'clean':
         default:
             return `   - Style: **Clean/Standard**.

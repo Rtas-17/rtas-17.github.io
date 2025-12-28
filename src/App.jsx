@@ -9,7 +9,7 @@ import { Sidebar } from './components/Sidebar';
 import { Menu } from 'lucide-react';
 
 function App() {
-  const { isRecording, startRecording, stopRecording } = useAudioRecorder();
+  const { isRecording, startRecording, stopRecording, setInputGain } = useAudioRecorder();
   const [messages, setMessages] = useState([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [currentDetectedLang, setCurrentDetectedLang] = useState('en'); // Default to 'en'
@@ -38,6 +38,14 @@ function App() {
   const [interimThrottle, setInterimThrottle] = useState(parseInt(localStorage.getItem('interim_throttle') || '250'));
   const [diarizationEnabled, setDiarizationEnabled] = useState(localStorage.getItem('diarization_enabled') === 'true');
   const [speakerNames, setSpeakerNames] = useState(JSON.parse(localStorage.getItem('speaker_names') || '{}'));
+
+
+
+  // Audio Pipeline Settings
+  const [audioPipelineEnabled, setAudioPipelineEnabled] = useState(localStorage.getItem('audio_pipeline') === 'true');
+  const [inputGain, setInputGainState] = useState(parseFloat(localStorage.getItem('audio_gain') || '1.0'));
+  const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('audio_noise_suppression') !== 'false');
+  const [echoCancellation, setEchoCancellation] = useState(localStorage.getItem('audio_echo_cancellation') !== 'false');
 
   // Refs for Event Listeners (Prevent Stale Closures)
   const useContextualRef = useRef(useContextualTranslation);
@@ -383,49 +391,70 @@ function App() {
 
   }, [currentTranscript, currentDetectedLang, interimTranslationEnabled, useContextualTranslation, geminiKey, selectedModel, primaryLanguage, secondaryLanguage, transliterationStyle, interimThrottle]);
 
-  const handleToggleRecord = () => {
+
+
+  // Update Gain when slider moves
+  useEffect(() => {
+    if (isRecording && audioPipelineEnabled) {
+      setInputGain(inputGain);
+    }
+  }, [inputGain, isRecording, audioPipelineEnabled, setInputGain]);
+
+  const handleToggleRecord = async () => {
     if (isRecording) {
-      stopRecording();
+      await stopRecording();
     } else {
+      const audioConfig = {
+        useCustomAudio: audioPipelineEnabled,
+        gain: inputGain,
+        noiseSuppression,
+        echoCancellation
+      };
       // Start Soniox with configured pair and Diarization
       // DISABLE Soniox Translation if Contextual (Gemini) is enabled to save tokens/latency
       const enableSonioxTranslation = !useContextualTranslation;
-      startRecording(primaryLanguage, secondaryLanguage, diarizationEnabled, null, enableSonioxTranslation);
+      await startRecording(primaryLanguage, secondaryLanguage, diarizationEnabled, null, enableSonioxTranslation, audioConfig);
     }
   };
 
-  const saveSettings = (key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle) => {
+  const saveSettings = (key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec) => {
     setGeminiKey(key);
-    localStorage.setItem('gemini_key', key);
-
     setPrimaryLanguage(prim);
-    localStorage.setItem('primary_lang', prim);
-
     setSecondaryLanguage(sec);
-    localStorage.setItem('secondary_lang', sec);
-
     setGeminiEnabled(enabled);
-    localStorage.setItem('gemini_enabled', enabled);
-
     setSelectedModel(model);
-    localStorage.setItem('gemini_model', model);
-
     setTransliterationStyle(style);
-    localStorage.setItem('gemini_style', style);
 
+    // Updates
     setUseContextualTranslation(contextual);
-    localStorage.setItem('use_contextual', contextual);
-
     setDiarizationEnabled(diarization);
-    localStorage.setItem('diarization_enabled', diarization);
-
     setInterimTranslationEnabled(interim);
-    localStorage.setItem('interim_translation_enabled', interim);
-
     setInterimThrottle(throttle);
-    localStorage.setItem('interim_throttle', throttle);
+
+    setAudioPipelineEnabled(audioEnabled);
+    setInputGainState(gain);
+    setNoiseSuppression(ns);
+    setEchoCancellation(ec);
 
     setShowSettings(false);
+
+    // Persistence
+    if (key) localStorage.setItem('gemini_api_key', key);
+    localStorage.setItem('primary_lang', prim);
+    localStorage.setItem('secondary_lang', sec);
+    localStorage.setItem('gemini_enabled', enabled);
+    localStorage.setItem('gemini_model', model);
+    localStorage.setItem('gemini_style', style);
+
+    localStorage.setItem('use_contextual', contextual);
+    localStorage.setItem('diarization_enabled', diarization);
+    localStorage.setItem('interim_translation_enabled', interim);
+    localStorage.setItem('interim_throttle', throttle);
+
+    localStorage.setItem('audio_pipeline', audioEnabled);
+    localStorage.setItem('audio_gain', gain);
+    localStorage.setItem('audio_noise_suppression', ns);
+    localStorage.setItem('audio_echo_cancellation', ec);
   };
 
   const handleRenameSpeaker = (id, newName) => {
@@ -632,6 +661,8 @@ function App() {
                         <option value="clean">Standard (Clean)</option>
                         <option value="precise">Precise (Symbols)</option>
                         <option value="franco">Franco (Arabizi)</option>
+                        <option value="ipa">International (IPA)</option>
+                        <option value="upa">Universal (UPA)</option>
                       </select>
                     </div>
 
@@ -690,6 +721,66 @@ function App() {
                         </div>
                       </div>
                     )}
+
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 mt-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-white">Advanced Audio Processing</span>
+                        <span className="text-xs text-gray-400">Boost volume & reduce noise manually</span>
+                      </div>
+                      <button
+                        onClick={() => setAudioPipelineEnabled(!audioPipelineEnabled)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${audioPipelineEnabled ? 'bg-primary' : 'bg-gray-600'}`}
+                      >
+                        <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${audioPipelineEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+
+                    {audioPipelineEnabled && (
+                      <div className="space-y-4 pl-2 border-l-2 border-primary/20 bg-white/5 p-3 rounded-r-lg">
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-sm text-gray-400">Input Gain (Volume Boost)</label>
+                            <span className="text-sm font-mono text-primary">{inputGain}x</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="5.0"
+                            step="0.1"
+                            value={inputGain}
+                            onChange={(e) => setInputGainState(parseFloat(e.target.value))}
+                            className="w-full accent-primary"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-gray-400">Noise Suppression</label>
+                          <input
+                            type="checkbox"
+                            checked={noiseSuppression}
+                            onChange={(e) => setNoiseSuppression(e.target.checked)}
+                            className="accent-primary w-4 h-4"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-gray-400">Echo Cancellation</label>
+                          <input
+                            type="checkbox"
+                            checked={echoCancellation}
+                            onChange={(e) => setEchoCancellation(e.target.checked)}
+                            className="accent-primary w-4 h-4"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (isRecording) await stopRecording();
+                            alert("Audio Engine Restarted.");
+                          }}
+                          className="w-full py-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg text-xs font-bold transition-colors"
+                        >
+                          Restart Audio Engine
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -726,7 +817,7 @@ function App() {
 
                 <div className="flex justify-end gap-3 mt-6">
                   <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-                  <button onClick={() => saveSettings(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+                  <button onClick={() => saveSettings(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle, audioPipelineEnabled, inputGain, noiseSuppression, echoCancellation)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
                 </div>
               </div>
             </div>
