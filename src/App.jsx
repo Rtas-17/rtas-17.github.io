@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Settings, Send, Globe, Sparkles, StopCircle, RefreshCw, X, Play, Languages } from 'lucide-react';
+import { Mic, MicOff, Settings, Send, Globe, Sparkles, StopCircle, RefreshCw, X, Play, Languages, Volume2, VolumeX, Volume } from 'lucide-react';
 import clsx from 'clsx';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
+import { useTextToSpeech } from './hooks/useTextToSpeech';
 import { sonioxService } from './services/soniox';
 import { initGemini, translateText, getAvailableModels } from './services/gemini';
 import { LiveTranscript } from './components/LiveTranscript';
@@ -46,6 +47,11 @@ function App() {
   const [inputGain, setInputGainState] = useState(parseFloat(localStorage.getItem('audio_gain') || '1.0'));
   const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('audio_noise_suppression') !== 'false');
   const [echoCancellation, setEchoCancellation] = useState(localStorage.getItem('audio_echo_cancellation') !== 'false');
+
+  // TTS Settings
+  const { speak, cancel: cancelTTS, isSpeaking: isTTSSpeaking, supported: ttsSupported } = useTextToSpeech();
+  const [autoTTSEnabled, setAutoTTSEnabled] = useState(localStorage.getItem('auto_tts') === 'true');
+  const [autoTTSLanguage, setAutoTTSLanguage] = useState(localStorage.getItem('auto_tts_lang') || 'en');
 
   // Refs for Event Listeners (Prevent Stale Closures)
   const useContextualRef = useRef(useContextualTranslation);
@@ -269,6 +275,24 @@ function App() {
           console.error("Gemini Error:", err);
         }
       }
+
+      // Auto-TTS Logic
+      // If Auto-Read is Enabled
+      // AND The detected language is NOT the autoTTSLanguage (meaning the Translation IS the autoTTSLanguage)
+      const autoEnabled = localStorage.getItem('auto_tts') === 'true'; // Access direct for freshness check inside closure? No, state is fine if we check Ref but this is inside useEffect so we need refs if we want latest state.
+      // Wait, useEffect dependencies need to be updated.
+      // Or we can use Refs for autoTTSEnabled like we did for others.
+      if (autoTTSEnabled) { // This will use the value from closure. We must add autoTTSEnabled to dependency array or use ref.
+        // Logic: If detected lang != target lang preference, then target text IS in target lang preference.
+        if (detectedLanguage !== autoTTSLanguage) {
+          // targetText holds the translation.
+          // We need to speak targetText.
+          // Wait, targetText is available here (lines 180-185).
+          await new Promise(r => setTimeout(r, 500)); // Small delay for UX
+          speak(targetText, autoTTSLanguage === 'ar' ? 'ar-EG' : 'en-US');
+        }
+      }
+
     });
 
     const unsubInterim = sonioxService.on('transcript_interim', (data) => {
@@ -315,7 +339,8 @@ function App() {
       unsubStatus();
       unsubError();
     };
-  }, [geminiKey, selectedModel, primaryLanguage, secondaryLanguage, geminiEnabled, transliterationStyle, useContextualTranslation, interimTranslationEnabled]);
+    // Add TTS dependencies to the main Effect
+  }, [geminiKey, selectedModel, primaryLanguage, secondaryLanguage, geminiEnabled, transliterationStyle, useContextualTranslation, interimTranslationEnabled, autoTTSEnabled, autoTTSLanguage, speak]);
 
 
   // Gemini Interim Logic (Debounced)
@@ -436,6 +461,12 @@ function App() {
     setNoiseSuppression(ns);
     setEchoCancellation(ec);
 
+    // TTS
+    // AutoTTS Enabled is handled by header toggle, but language is here
+    // Actually, user might want to save everything here. 
+    // We already have state for 'autoTTSLanguage', assume we pass it in saveSettings too?
+    // Let's add it to args to be clean.
+
     setShowSettings(false);
 
     // Persistence
@@ -457,6 +488,18 @@ function App() {
     localStorage.setItem('audio_echo_cancellation', ec);
   };
 
+  const saveSettingsExtended = (key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec, ttsLang) => {
+    saveSettings(key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec);
+    setAutoTTSLanguage(ttsLang);
+    localStorage.setItem('auto_tts_lang', ttsLang);
+  };
+
+  const toggleAutoTTS = () => {
+    const newVal = !autoTTSEnabled;
+    setAutoTTSEnabled(newVal);
+    localStorage.setItem('auto_tts', newVal);
+  };
+
   const handleRenameSpeaker = (id, newName) => {
     const updated = { ...speakerNames, [id]: newName };
     setSpeakerNames(updated);
@@ -474,6 +517,26 @@ function App() {
           >
             <Menu />
           </button>
+          <div className="flex gap-2">
+            {ttsSupported && (
+              <button
+                onClick={toggleAutoTTS}
+                className={clsx(
+                  "p-2 rounded-lg transition-colors border border-white/10",
+                  autoTTSEnabled ? "bg-primary text-white" : "bg-white/5 text-gray-400 hover:text-white"
+                )}
+                title={`Auto-Read ${autoTTSLanguage === 'en' ? 'English' : 'Arabic'}`}
+              >
+                {autoTTSEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+              </button>
+            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white transition-colors border border-white/10"
+            >
+              <Settings size={20} />
+            </button>
+          </div>
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.4)]">
             <span className="font-bold text-white text-xl">M</span>
           </div>
@@ -666,7 +729,26 @@ function App() {
                       </select>
                     </div>
 
-                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                    <div className="space-y-2 pt-4 border-t border-white/10">
+                      <label className="text-sm font-medium text-gray-300">Auto-Read Language (TTS)</label>
+                      <p className="text-xs text-gray-500 mb-2">The app will automatically read aloud translations in this language.</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAutoTTSLanguage('en')}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${autoTTSLanguage === 'en' ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'}`}
+                        >
+                          English
+                        </button>
+                        <button
+                          onClick={() => setAutoTTSLanguage('ar')}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${autoTTSLanguage === 'ar' ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'}`}
+                        >
+                          Arabic
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 mt-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-white">Contextual Translation</span>
                         <span className="text-xs text-gray-400">Slower, but uses Egyptian dialect/tone.</span>
@@ -817,7 +899,10 @@ function App() {
 
                 <div className="flex justify-end gap-3 mt-6">
                   <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-                  <button onClick={() => saveSettings(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle, audioPipelineEnabled, inputGain, noiseSuppression, echoCancellation)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
+                    <button onClick={() => saveSettingsExtended(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle, audioPipelineEnabled, inputGain, noiseSuppression, echoCancellation, autoTTSLanguage)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
+                  </div>
                 </div>
               </div>
             </div>
