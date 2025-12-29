@@ -27,34 +27,18 @@ export const GoogleTTS = {
     async speak(text, lang = 'en-US') {
         const url = this.getAudioUrl(text, lang);
 
-        try {
-            // Fetch the audio content directly to control headers (specifically Referrer)
-            const response = await fetch(url, {
-                referrerPolicy: 'no-referrer'
-            });
+        // Use standard Audio object which supports opaque responses (bypassing CORS read blocking)
+        // We know client=tw-ob returns 200 OK, so Audio() will play it.
+        const audio = new Audio(url);
 
-            if (!response.ok) {
-                throw new Error(`Google TTS API returned ${response.status}: ${response.statusText}`);
-            }
-
-            const blob = await response.blob();
-            const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
-
-            return new Promise((resolve, reject) => {
-                audio.onended = () => {
-                    URL.revokeObjectURL(audioUrl); // Cleanup
-                    resolve();
-                };
-                audio.onerror = (e) => {
-                    URL.revokeObjectURL(audioUrl);
-                    reject(e);
-                };
-                audio.play().catch(reject);
-            });
-        } catch (error) {
-            console.error("Google TTS Fetch Error:", error);
-            throw error;
-        }
+        return new Promise((resolve, reject) => {
+            audio.onended = () => resolve();
+            audio.onerror = (e) => {
+                // Audio errors are generic, but if it fails here it's likely a network/decoding issue
+                console.error("Google TTS Audio Error", e);
+                reject(new Error("Audio playback failed (check network or format)"));
+            };
+            audio.play().catch(reject);
+        });
     }
 };
