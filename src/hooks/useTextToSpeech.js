@@ -75,9 +75,29 @@ export const useTextToSpeech = () => {
                 });
             } catch (err) {
                 console.error("TTS Service Failed:", err);
+
+                // Automatic Fallback to System Voices (Safety Net for Production)
+                if (provider !== 'system') {
+                    console.warn(`Falling back to System TTS due to ${provider} failure.`);
+                    try {
+                        // Recursively call for system
+                        if (!synthRef.current) return;
+                        const utterance = new SpeechSynthesisUtterance(text);
+                        utterance.lang = lang;
+                        utterance.onstart = () => setIsSpeaking(true);
+                        utterance.onend = () => setIsSpeaking(false);
+                        utterance.onerror = () => setIsSpeaking(false);
+                        synthRef.current.speak(utterance);
+                        return;
+                    } catch (sysErr) {
+                        console.error("System Fallback failed:", sysErr);
+                    }
+                }
+
                 alert(`TTS Error (${provider}): ${err.message}`);
             } finally {
-                setIsSpeaking(false);
+                // If allowed to fall through
+                if (provider === 'system') setIsSpeaking(false);
             }
         }
     }, []);

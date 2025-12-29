@@ -6,7 +6,8 @@ const getGoogleUrl = (targetLang, encodedText) => {
         return `${protocol}//${window.location.host}/google-tts/translate_tts?client=gtx&ie=UTF-8&tl=${targetLang}&q=${encodedText}`;
     }
     // Production / Direct
-    return `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${targetLang}&q=${encodedText}`;
+    // Use 'tw-ob' client which is more CORS-friendly for direct browser access
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=${targetLang}&total=1&idx=0&textlen=${encodedText.length}&client=tw-ob`;
 };
 
 export const GoogleTTS = {
