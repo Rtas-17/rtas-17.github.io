@@ -26,12 +26,35 @@ export const GoogleTTS = {
 
     async speak(text, lang = 'en-US') {
         const url = this.getAudioUrl(text, lang);
-        const audio = new Audio(url);
 
-        return new Promise((resolve, reject) => {
-            audio.onended = () => resolve();
-            audio.onerror = (e) => reject(e);
-            audio.play().catch(reject);
-        });
+        try {
+            // Fetch the audio content directly to control headers (specifically Referrer)
+            const response = await fetch(url, {
+                referrerPolicy: 'no-referrer'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Google TTS API returned ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+
+            return new Promise((resolve, reject) => {
+                audio.onended = () => {
+                    URL.revokeObjectURL(audioUrl); // Cleanup
+                    resolve();
+                };
+                audio.onerror = (e) => {
+                    URL.revokeObjectURL(audioUrl);
+                    reject(e);
+                };
+                audio.play().catch(reject);
+            });
+        } catch (error) {
+            console.error("Google TTS Fetch Error:", error);
+            throw error;
+        }
     }
 };
