@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Bot, User, Pencil } from 'lucide-react';
+import { User, Pencil, Volume2, Mic } from 'lucide-react';
 
 const SpeakerBadge = ({ speakerId, name, onRename }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -60,7 +60,7 @@ const SpeakerBadge = ({ speakerId, name, onRename }) => {
     );
 };
 
-export function LiveTranscript({ messages, currentTranscript, currentTranslation, speakerNames = {}, onRenameSpeaker }) {
+export function LiveTranscript({ messages, currentTranscript, currentTranslation, speakerNames = {}, onRenameSpeaker, speak, autoTTSLanguage, preferredVoiceURI }) {
     const bottomRef = useRef(null);
 
     useEffect(() => {
@@ -72,7 +72,7 @@ export function LiveTranscript({ messages, currentTranscript, currentTranslation
             {messages.map((msg, idx) => (
                 <div key={idx} className={clsx("flex flex-col gap-2 max-w-[85%]", msg.role === 'user' ? "ml-auto" : "mr-auto")}>
                     <div className={clsx(
-                        "p-4 rounded-2xl shadow-lg border border-border/50",
+                        "p-4 rounded-2xl shadow-lg border border-border/50 relative group",
                         msg.role === 'user' ? "bg-surface text-text-main rounded-tr-sm" : "bg-primary/10 text-text-main rounded-tl-sm"
                     )}>
                         {msg.speaker && (
@@ -82,11 +82,36 @@ export function LiveTranscript({ messages, currentTranscript, currentTranslation
                                 onRename={(newName) => onRenameSpeaker(msg.speaker, newName)}
                             />
                         )}
-                        <p className="text-lg font-medium leading-relaxed">{msg.text}</p>
+                        <p className="text-lg font-medium leading-relaxed font-sans group/original relative">
+                            {msg.text}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    speak(msg.text, 'auto');
+                                }}
+                                className="inline-flex ml-2 p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all opacity-0 group-hover/original:opacity-100 align-middle"
+                                title="Play Original"
+                            >
+                                <Mic size={16} />
+                            </button>
+                        </p>
 
                         {msg.translation && (
-                            <div className="mt-4 pt-3 border-t border-white/10 text-right">
-                                <p className="text-xl font-arabic text-primary font-bold">{msg.translation.arabic}</p>
+                            <div className="mt-4 pt-3 border-t border-white/10 text-right group/translation">
+                                <p className="text-xl font-arabic text-primary font-bold leading-relaxed inline-block" dir="auto">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const langToSpeak = autoTTSLanguage === 'ar' ? 'ar-EG' : 'en-US';
+                                            speak(msg.translation.arabic, langToSpeak, preferredVoiceURI);
+                                        }}
+                                        className="inline-flex mr-2 p-1.5 text-primary/70 hover:text-primary hover:bg-white/10 rounded-full transition-all opacity-0 group-hover/translation:opacity-100 align-middle"
+                                        title="Play Translation"
+                                    >
+                                        <Volume2 size={18} />
+                                    </button>
+                                    {msg.translation.arabic}
+                                </p>
                                 <p className="text-sm font-mono text-text-muted mt-1 opacity-80">{msg.translation.phonetic}</p>
                             </div>
                         )}

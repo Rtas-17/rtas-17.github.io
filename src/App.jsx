@@ -49,9 +49,13 @@ function App() {
   const [echoCancellation, setEchoCancellation] = useState(localStorage.getItem('audio_echo_cancellation') !== 'false');
 
   // TTS Settings
-  const { speak, cancel: cancelTTS, isSpeaking: isTTSSpeaking, supported: ttsSupported } = useTextToSpeech();
+  const { speak, cancel: cancelTTS, isSpeaking: isTTSSpeaking, supported: ttsSupported, voices } = useTextToSpeech();
   const [autoTTSEnabled, setAutoTTSEnabled] = useState(localStorage.getItem('auto_tts') === 'true');
   const [autoTTSLanguage, setAutoTTSLanguage] = useState(localStorage.getItem('auto_tts_lang') || 'en');
+  const [preferredVoiceURI, setPreferredVoiceURI] = useState(localStorage.getItem('tts_voice_uri') || '');
+  const [ttsProvider, setTTSProvider] = useState(localStorage.getItem('tts_provider') || 'google');
+  const [elevenLabsKey, setElevenLabsKey] = useState(localStorage.getItem('elevenlabs_key') || '');
+  const [openAIKey, setOpenAIKey] = useState(localStorage.getItem('openai_key') || '');
 
   // Refs for Event Listeners (Prevent Stale Closures)
   const useContextualRef = useRef(useContextualTranslation);
@@ -289,7 +293,8 @@ function App() {
           // We need to speak targetText.
           // Wait, targetText is available here (lines 180-185).
           await new Promise(r => setTimeout(r, 500)); // Small delay for UX
-          speak(targetText, autoTTSLanguage === 'ar' ? 'ar-EG' : 'en-US');
+          const langToSpeak = autoTTSLanguage === 'ar' ? 'ar-EG' : 'en-US';
+          speak(targetText, langToSpeak, preferredVoiceURI);
         }
       }
 
@@ -340,7 +345,7 @@ function App() {
       unsubError();
     };
     // Add TTS dependencies to the main Effect
-  }, [geminiKey, selectedModel, primaryLanguage, secondaryLanguage, geminiEnabled, transliterationStyle, useContextualTranslation, interimTranslationEnabled, autoTTSEnabled, autoTTSLanguage, speak]);
+  }, [geminiKey, selectedModel, primaryLanguage, secondaryLanguage, geminiEnabled, transliterationStyle, useContextualTranslation, interimTranslationEnabled, autoTTSEnabled, autoTTSLanguage, preferredVoiceURI, speak]);
 
 
   // Gemini Interim Logic (Debounced)
@@ -488,10 +493,19 @@ function App() {
     localStorage.setItem('audio_echo_cancellation', ec);
   };
 
-  const saveSettingsExtended = (key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec, ttsLang) => {
+  const saveSettingsExtended = (key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec, ttsLang, voiceURI, provider, key11, keyOA) => {
     saveSettings(key, prim, sec, enabled, model, style, contextual, diarization, interim, throttle, audioEnabled, gain, ns, ec);
     setAutoTTSLanguage(ttsLang);
     localStorage.setItem('auto_tts_lang', ttsLang);
+    setPreferredVoiceURI(voiceURI);
+    localStorage.setItem('tts_voice_uri', voiceURI);
+
+    setTTSProvider(provider);
+    localStorage.setItem('tts_provider', provider);
+    setElevenLabsKey(key11);
+    localStorage.setItem('elevenlabs_key', key11);
+    setOpenAIKey(keyOA);
+    localStorage.setItem('openai_key', keyOA);
   };
 
   const toggleAutoTTS = () => {
@@ -517,26 +531,7 @@ function App() {
           >
             <Menu />
           </button>
-          <div className="flex gap-2">
-            {ttsSupported && (
-              <button
-                onClick={toggleAutoTTS}
-                className={clsx(
-                  "p-2 rounded-lg transition-colors border border-white/10",
-                  autoTTSEnabled ? "bg-primary text-white" : "bg-white/5 text-gray-400 hover:text-white"
-                )}
-                title={`Auto-Read ${autoTTSLanguage === 'en' ? 'English' : 'Arabic'}`}
-              >
-                {autoTTSEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-              </button>
-            )}
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white transition-colors border border-white/10"
-            >
-              <Settings size={20} />
-            </button>
-          </div>
+          {/* Removed duplicate settings and auto-read from here to move to right */}
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.4)]">
             <span className="font-bold text-white text-xl">M</span>
           </div>
@@ -551,9 +546,23 @@ function App() {
           </div>
         </div>
 
-        <button onClick={() => setShowSettings(!showSettings)} className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-white">
-          <Settings size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          {ttsSupported && (
+            <button
+              onClick={toggleAutoTTS}
+              className={clsx(
+                "p-2 rounded-lg transition-colors border border-white/10",
+                autoTTSEnabled ? "bg-primary text-white" : "bg-white/5 text-gray-400 hover:text-white"
+              )}
+              title={`Auto-Read ${autoTTSLanguage === 'en' ? 'English' : 'Arabic'}`}
+            >
+              {autoTTSEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            </button>
+          )}
+          <button onClick={() => setShowSettings(!showSettings)} className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-white">
+            <Settings size={20} />
+          </button>
+        </div>
       </header>
 
       {/* Main Layout Area */}
@@ -577,6 +586,9 @@ function App() {
             currentTranslation={currentTranslation}
             speakerNames={speakerNames}
             onRenameSpeaker={handleRenameSpeaker}
+            speak={speak}
+            autoTTSLanguage={autoTTSLanguage}
+            preferredVoiceURI={preferredVoiceURI}
           />
           {/* Input Area / Controls */}
           <div className="p-6 pb-8 bg-gradient-to-t from-background via-background to-transparent relative z-20">
@@ -746,6 +758,65 @@ function App() {
                           Arabic
                         </button>
                       </div>
+
+                      {/* TTS Provider Selection */}
+                      <div className="mt-4 pt-4 border-t border-white/10 space-y-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-sm font-medium text-gray-300">TTS Engine</label>
+                          <select
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                            value={ttsProvider}
+                            onChange={(e) => setTTSProvider(e.target.value)}
+                          >
+                            <option value="google">Google Translate (Free & Reliable)</option>
+                            <option value="edge">Microsoft Edge (Free & High Quality)</option>
+                            <option value="elevenlabs">ElevenLabs (Premium)</option>
+                            <option value="openai">OpenAI (Premium)</option>
+                            <option value="system">System Default (Device)</option>
+                          </select>
+                        </div>
+
+                        {ttsProvider === 'elevenlabs' && (
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">ElevenLabs API Key</label>
+                            <input type="password" value={elevenLabsKey} onChange={(e) => setElevenLabsKey(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 font-mono" placeholder="xi-..." />
+                          </div>
+                        )}
+
+                        {ttsProvider === 'openai' && (
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">OpenAI API Key</label>
+                            <input type="password" value={openAIKey} onChange={(e) => setOpenAIKey(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 font-mono" placeholder="sk-..." />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Voice Selection */}
+                      <div className="mt-3">
+                        <label className="text-xs text-gray-400 mb-1 block">Preferred Voice (Optional)</label>
+                        <select
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                          value={preferredVoiceURI}
+                          onChange={(e) => setPreferredVoiceURI(e.target.value)}
+                        >
+                          <option value="">Default (Auto-Detect)</option>
+                          {voices
+                            .filter(v => v.lang.startsWith(autoTTSLanguage === 'en' ? 'en' : 'ar'))
+                            .map(v => (
+                              <option key={v.voiceURI} value={v.voiceURI}>
+                                {v.name} ({v.lang})
+                              </option>
+                            ))
+                          }
+                        </select>
+                        <button
+                          onClick={() => speak(autoTTSLanguage === 'ar' ? 'هذا اختبار صوتي لتتأكد من الجودة' : 'This is a voice test to check quality.', autoTTSLanguage, preferredVoiceURI)}
+                          className="mt-2 w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-gray-300 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                          Preview Voice
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 mt-4">
@@ -899,10 +970,7 @@ function App() {
 
                 <div className="flex justify-end gap-3 mt-6">
                   <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-                  <div className="flex justify-end gap-3 mt-6">
-                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-text-muted hover:text-white">Cancel</button>
-                    <button onClick={() => saveSettingsExtended(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle, audioPipelineEnabled, inputGain, noiseSuppression, echoCancellation, autoTTSLanguage)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
-                  </div>
+                  <button onClick={() => saveSettingsExtended(geminiKey, primaryLanguage, secondaryLanguage, geminiEnabled, selectedModel, transliterationStyle, useContextualTranslation, diarizationEnabled, interimTranslationEnabled, interimThrottle, audioPipelineEnabled, inputGain, noiseSuppression, echoCancellation, autoTTSLanguage, preferredVoiceURI, ttsProvider, elevenLabsKey, openAIKey)} className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover">Save & Start</button>
                 </div>
               </div>
             </div>
